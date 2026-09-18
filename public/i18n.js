@@ -145,7 +145,6 @@
       'home.repos': ({ n }) => `저장소 ${num(n)}곳`,
       'home.activityFailed': '활동 기록을 불러오지 못했습니다.',
       'home.finalsTitle': '최종본', 'home.finalsEmpty': '최종본으로 표시한 산출물이 아직 없습니다.',
-      'home.recentTitle': '최근 바뀐 것', 'home.recentEmpty': '최근 바뀐 산출물이 없습니다.',
       'keys.move': '이동', 'keys.fold': '접기 · 펼치기', 'keys.search': '검색',
 
       'chart.title': ({ period }) => `${period} · 에이전트가 쓴 산출물`,
@@ -302,7 +301,6 @@
       'home.repos': ({ n }) => count(n, 'repository', 'repositories'),
       'home.activityFailed': 'Couldn’t load activity.',
       'home.finalsTitle': 'Final', 'home.finalsEmpty': 'Nothing is marked final yet.',
-      'home.recentTitle': 'Recently changed', 'home.recentEmpty': 'Nothing changed recently.',
       'keys.move': 'move', 'keys.fold': 'collapse · expand', 'keys.search': 'search',
 
       'chart.title': ({ period }) => `${period} · Artifacts written by agents`,
