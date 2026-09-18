@@ -14,8 +14,7 @@ const TREE_LIMIT = 5000;
 const ORIGIN_PREVIEW_COUNT = 8;
 const HOME_LIST_COUNT = 6;
 // 변경 목록은 한 번에 이만큼 받고, 개요에는 앞의 몇 개만 둔다.
-const CHANGE_FEED_LIMIT = 20;
-const HOME_CHANGE_COUNT = 8;
+const CHANGE_PAGE_SIZE = 30;
 // 이 시간 안에 생기거나 바뀐 파일에는 트리에서 표시를 단다. 그 뒤로는 평범한 줄로 돌아간다.
 const FRESH_WINDOW_S = 10 * 60;
 const EXPLORER_WIDTH = { min: 240, max: 560, step: 16, initial: 340 };
@@ -46,6 +45,8 @@ const state = {
   searchOpen: {},
   detail: null,
   changes: [],
+  changesMore: false,
+  changesLoading: false,
   hiddenChanges: {},
   period: 'all',
 };
@@ -329,16 +330,55 @@ async function loadFacets() {
   return state.facets;
 }
 
-async function loadChanges() {
+const addCounts = (base, extra = {}) =>
+  Object.fromEntries([...new Set([...Object.keys(base), ...Object.keys(extra)])].map((key) => [key, (base[key] ?? 0) + (extra[key] ?? 0)]));
+
+/**
+ * 변경 기록은 쪽 단위로 쌓는다. 실시간 갱신은 가장 새 줄 뒤(after)만 받아 위에 붙인다 — 첫 쪽을
+ * 다시 받으면 스크롤로 불러 둔 이전 기록이 사라진다. 한 쪽보다 많이 밀렸으면 처음부터 다시 받는다.
+ */
+async function loadChanges({ live = false } = {}) {
+  const newest = state.changes[0]?.id;
   try {
-    const data = await api(`/api/changes?${searchParams({ limit: CHANGE_FEED_LIMIT })}`);
+    if (live && newest !== undefined) {
+      const data = await api(`/api/changes?${searchParams({ limit: CHANGE_PAGE_SIZE, after: newest })}`);
+      if (!data.more) {
+        state.changes = [...data.changes, ...state.changes];
+        state.hiddenChanges = addCounts(state.hiddenChanges, data.hidden);
+        return;
+      }
+    }
+    const data = await api(`/api/changes?${searchParams({ limit: CHANGE_PAGE_SIZE })}`);
     state.changes = data.changes;
+    state.changesMore = data.more;
     state.hiddenChanges = data.hidden ?? {};
   } catch {
     // 변경 목록은 보조 정보다. 못 받아도 트리와 개요는 그대로 그린다.
     state.changes = [];
+    state.changesMore = false;
     state.hiddenChanges = {};
   }
+}
+
+/** 스크롤이 목록 끝에 닿으면 한 쪽 더. 그사이 필터가 바뀌어 목록이 새로 찼으면 받은 쪽을 버린다. */
+async function loadOlderChanges() {
+  const oldest = state.changes.at(-1)?.id;
+  if (state.changesLoading || !state.changesMore || oldest === undefined) return;
+  state.changesLoading = true;
+  let data;
+  try {
+    data = await api(`/api/changes?${searchParams({ limit: CHANGE_PAGE_SIZE, before: oldest })}`);
+  } catch {
+    // 끝 표시가 계속 보이면 관찰자가 곧바로 다시 부른다. 실패는 그대로 두고 다음 스크롤에 맡긴다.
+    return;
+  } finally {
+    state.changesLoading = false;
+  }
+  if (state.changes.at(-1)?.id !== oldest) return;
+  state.changes = [...state.changes, ...data.changes];
+  state.changesMore = data.more;
+  state.hiddenChanges = addCounts(state.hiddenChanges, data.hidden);
+  replaceChangesPanel();
 }
 
 async function refreshFacets() {
@@ -812,7 +852,7 @@ async function refresh({ live = false } = {}) {
   const [{ rows, total }] = await Promise.all([
     api(`/api/search?${searchParams({ limit: TREE_LIMIT })}`),
     loadFacets(),
-    loadChanges(),
+    loadChanges({ live }),
   ]);
   // 새 변경이 오면 파일 줄은 그대로여도 표시("새로")와 개요 목록이 바뀐다.
   const signature = `${state.changes[0]?.id ?? 0}|${rows.map((r) => `${r.id}:${r.mtime}:${r.state}:${r.favorite}`).join(',')}`;
@@ -1205,28 +1245,56 @@ function homeItem(row) {
       el('span', { className: 'home-meta' }, ...locationNodes(row), el('span', { className: 'when' }, relativeWhen(row.mtime)))));
 }
 
-/** 방금 일어난 일. 에이전트 기록으로 본 변화와 디스크를 다시 확인해 본 변화를 구분해 적는다. */
+let changesObserver = null;
+
+/**
+ * 방금 일어난 일. 에이전트 기록으로 본 변화와 디스크를 다시 확인해 본 변화를 구분해 적는다.
+ * 목록은 제 높이 안에서 스크롤하고, 끝에 닿으면 이전 쪽을 받는다(보관 30일이라 수천 줄이 될 수 있다).
+ */
 function changesPanel() {
-  const items = state.changes.slice(0, HOME_CHANGE_COUNT);
-  return el('section', { className: 'changes' },
-    el('h3', {}, t('changes.title')),
-    items.length
-      ? el('ol', { className: 'change-list' }, ...items.map((change) =>
-          el('li', {}, el('button', {
-            type: 'button',
-            className: 'change-item',
-            onclick: () => select(change.artifact_id, { reveal: true }),
-          },
-            el('span', { className: `change-kind change-${change.change}` }, t(`change.${change.change}`)),
-            el('span', { className: 'change-name' }, change.file_name),
-            el('span', { className: 'change-where' }, ...locationNodes(change)),
-            el('span', { className: 'change-tags' }, ...keep([
-              ...changeAgents(change),
-              change.source === 'disk' && el('span', { className: 'change-outside', title: t('changes.outsideTitle') }, t('changes.outside')),
-            ])),
-            el('span', { className: 'when', title: fmtDate(change.at) }, relativeWhen(change.at))))))
-      : el('p', { className: 'hint' }, t('changes.empty')),
-    hiddenChangesLine());
+  changesObserver?.disconnect();
+  changesObserver = null;
+  if (state.changes.length === 0) {
+    return el('section', { className: 'changes' }, el('h3', {}, t('changes.title')), el('p', { className: 'hint' }, t('changes.empty')), hiddenChangesLine());
+  }
+  const tail = state.changesMore
+    ? el('li', { className: 'change-more hint' }, t('changes.loading'))
+    : state.changes.length > CHANGE_PAGE_SIZE && el('li', { className: 'change-more hint' }, t('changes.end'));
+  const scroller = el('div', { className: 'change-scroll' }, el('ol', { className: 'change-list' }, ...state.changes.map(changeRow), tail));
+  if (state.changesMore) {
+    changesObserver = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) void loadOlderChanges();
+    }, { root: scroller, rootMargin: '0px 0px 120px 0px' });
+    changesObserver.observe(tail);
+  }
+  return el('section', { className: 'changes' }, el('h3', {}, t('changes.title')), scroller, hiddenChangesLine());
+}
+
+function changeRow(change) {
+  return el('li', {}, el('button', {
+    type: 'button',
+    className: 'change-item',
+    onclick: () => select(change.artifact_id, { reveal: true }),
+  },
+    el('span', { className: `change-kind change-${change.change}` }, t(`change.${change.change}`)),
+    el('span', { className: 'change-name' }, change.file_name),
+    el('span', { className: 'change-where' }, ...locationNodes(change)),
+    el('span', { className: 'change-tags' }, ...keep([
+      ...changeAgents(change),
+      change.source === 'disk' && el('span', { className: 'change-outside', title: t('changes.outsideTitle') }, t('changes.outside')),
+    ])),
+    el('span', { className: 'when', title: fmtDate(change.at) }, relativeWhen(change.at))));
+}
+
+/** 이전 쪽을 붙일 때는 개요 전체가 아니라 이 칸만 바꾼다. 그래프를 다시 그리지 않고 스크롤도 그대로다. */
+function replaceChangesPanel() {
+  const current = document.querySelector('.dash .changes');
+  if (!current) return;
+  const top = current.querySelector('.change-scroll')?.scrollTop ?? 0;
+  const next = changesPanel();
+  current.replaceWith(next);
+  const scroller = next.querySelector('.change-scroll');
+  if (scroller) scroller.scrollTop = top;
 }
 
 /**
@@ -1282,6 +1350,9 @@ async function renderHome() {
   const current = $('detail').querySelector('.dash');
   current?.classList.add('refreshing');
   const scroll = current?.scrollTop ?? 0;
+  const feed = current?.querySelector('.change-scroll');
+  const feedTop = feed?.scrollTop ?? 0;
+  const feedHeight = feed?.scrollHeight ?? 0;
   let activity;
   try {
     activity = await api(`/api/timeline?${searchParams()}`);
@@ -1292,6 +1363,9 @@ async function renderHome() {
   const dash = dashboard(activity);
   $('detail').replaceChildren(dash);
   dash.scrollTop = scroll;
+  // 실시간으로 위에 줄이 붙어도 보던 줄이 제자리에 있게 한다. 맨 위를 보고 있었으면 새 줄을 보인다.
+  const nextFeed = dash.querySelector('.change-scroll');
+  if (nextFeed && feedTop > 0) nextFeed.scrollTop = feedTop + (nextFeed.scrollHeight - feedHeight);
   for (const draw of dash.querySelectorAll('.chart')) draw.dispatchEvent(new Event('draw'));
 }
 
@@ -1307,8 +1381,8 @@ function dashboard(activity) {
       el('p', { className: 'dash-sub' },
         [state.period !== 'all' && t(`periodTitle.${state.period}`), t('home.count', { n: state.total }), t('home.finals', { n: finals.length }), t('home.repos', { n: repos.size })].filter(Boolean).join(' · '))),
     activity ? activityPanel(activity) : el('p', { className: 'hint' }, t('home.activityFailed')),
-    changesPanel(),
     distributions(),
+    changesPanel(),
     el('div', { className: 'dash-grid' },
       homeList(t('home.finalsTitle'), finals.slice(0, HOME_LIST_COUNT), t('home.finalsEmpty')),
       homeList(t('home.recentTitle'), recent.slice(0, HOME_LIST_COUNT), t('home.recentEmpty'))),
