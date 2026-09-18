@@ -582,6 +582,9 @@ embed.preview-fill { height: 100%; }
 .dist-bar { display: block; height: 100%; min-width: 2px; border-radius: 0 4px 4px 0; background: var(--bar); }
 .dist-n { text-align: right; font-size: var(--text-xs); color: var(--text-dim); font-variant-numeric: tabular-nums; }
 .dist-note { margin-top: var(--space-2); margin-left: var(--space-2); }
+/* 여덟 줄 반을 보인다. 반 줄이 걸쳐 있어야 아래에 더 있다는 게 보인다. */
+.change-scroll { max-height: calc(8.5 * 35px); overflow-y: auto; overscroll-behavior: contain; }
+.change-more { padding: var(--space-2); font-size: var(--text-xs); text-align: center; }
 .change-list { list-style: none; margin: 0; padding: 0; }
 .change-list li + li { border-top: 1px solid var(--border); }
 .change-item {

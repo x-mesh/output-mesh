@@ -177,6 +177,38 @@ describe('워처와 변경 목록', () => {
     expect(latest).toMatchObject({ change: 'modified', source: 'disk', collector: null, collectors: ['claude-code', 'codex'] });
   });
 
+  test('쪽으로 나눠 받아도 빠지거나 겹치는 줄이 없고, 숨긴 건수는 쪽마다 더하면 전체가 된다', async () => {
+    const names = ['a.md', 'b.rs', 'c.md', 'd.md', 'e.rs', 'f.md', 'g.md'];
+    for (const name of names) {
+      writeFileSync(join(dir, name), name);
+      await ingestFile(store, join(dir, name), { ...codex, workspace: dir });
+    }
+    const pages = [];
+    let hidden = {};
+    let before = null;
+    for (;;) {
+      const page = recentChanges(store, '', { view: 'library' }, 2, { before });
+      pages.push(page.changes.map((c) => c.file_name));
+      for (const [kind, n] of Object.entries(page.hidden)) hidden[kind] = (hidden[kind] ?? 0) + n;
+      if (!page.more) break;
+      before = page.changes.at(-1).id;
+    }
+    expect(pages).toEqual([['g.md', 'f.md'], ['d.md', 'c.md'], ['a.md']]);
+    expect(hidden).toEqual({ code: 2 });
+  });
+
+  test('after 는 그 뒤에 생긴 줄만 준다 — 실시간 갱신이 불러 둔 이전 기록을 지우지 않게', async () => {
+    writeFileSync(join(dir, 'old.md'), 'x');
+    await ingestFile(store, join(dir, 'old.md'), codex);
+    const [seen] = recentChanges(store, '', { view: 'library' }).changes;
+    writeFileSync(join(dir, 'new.md'), 'y');
+    await ingestFile(store, join(dir, 'new.md'), codex);
+
+    const page = recentChanges(store, '', { view: 'library' }, 10, { after: seen.id });
+    expect(page.changes.map((c) => c.file_name)).toEqual(['new.md']);
+    expect(page.more).toBe(false);
+  });
+
   test('오래된 기록은 지운다', async () => {
     const path = join(dir, 'old.md');
     writeFileSync(path, 'x');
