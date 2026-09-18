@@ -8,6 +8,16 @@ lives in `package.json`; `output-mesh --version` and the explorer footer show it
 
 ## [Unreleased]
 
+### Added
+
+- **collect:** documents in repositories an agent has worked in, including the ones an agent writes through the shell. The first run adds documents changed in the last 7 days; after that each repository is watched and new or edited documents show up within seconds. Source code is not collected this way
+- **overview:** the "Just happened" feed says how many code and other changes the library hides, and one click shows them
+
+### Changed
+
+- changes found by watching the disk are labeled "seen on disk" instead of "outside an agent", since an agent may have made them through the shell
+- files you import and documents found in repositories no longer count as agent sessions in the activity graph or the 24-hour count
+
 ## [0.1.0] - 2026-09-18
 
 ### Added

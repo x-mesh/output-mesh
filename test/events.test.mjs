@@ -159,7 +159,8 @@ describe('워처와 변경 목록', () => {
     rmSync(doc);
     await recheckKnownFiles(store);
 
-    const changes = recentChanges(store, '', { view: 'library' });
+    const { changes, hidden } = recentChanges(store, '', { view: 'library' });
+    expect(hidden).toEqual({ code: 1 });
     expect(changes.map((c) => [c.file_name, c.change])).toEqual([['guide.md', 'missing'], ['guide.md', 'created']]);
     expect(changes[0].location).toMatchObject({ dir: '/' });
   });

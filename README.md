@@ -49,11 +49,12 @@ bun bin/output-mesh.mjs
 | Aside | `~/.aside/u/<account>/sessions/<date>_<id>/artifacts/` | Watches the folder, enriches from Aside's `state.db` (opened read-only) |
 | Codex | `~/.codex/sessions/**/rollout-*.jsonl` | Paths from `apply_patch` markers in session logs |
 | Claude Code | `~/.claude/projects/**/*.jsonl` | `file_path` of `Write` / `Edit` tool calls |
+| Your repositories | Repositories any of the above worked in | Documents changed in the last 7 days, then a folder watch for new or edited ones |
 | Anything else | A folder or file you choose | `output-mesh import <path>` |
 
 Codex and Claude Code do not keep artifacts anywhere special. Their logs record which paths they wrote, so output-mesh attaches provenance to files that are still in your repositories and leaves them where they are.
 
-The library shows documents, web pages, images, spreadsheets, and bundles. Source code and unknown formats are collected but hidden by default; pick them from the Kind filter when you need them.
+The library shows documents, web pages, images, spreadsheets, and bundles. Source code and unknown formats are collected but hidden by default; pick them from the Kind filter when you need them. The "Just happened" feed hides them too and says how many it hid.
 
 ## Using it
 
@@ -94,7 +95,7 @@ Your catalog lives in `~/Library/Application Support/AgentOutputCatalog/catalog.
 
 - Spreadsheet text extraction uses the system `unzip`.
 - Importing from `~/Downloads`, `~/Desktop`, or `~/Documents` needs Full Disk Access for the `bun` binary once.
-- Files Claude Code writes through the shell (not the `Write` tool) leave no path in the log and are not discovered.
+- Files an agent writes through the shell leave no path in its log. Documents are still found by watching the repository, but they carry no session; source code written that way is not collected.
 - Spreadsheet previews show values only (first 200 rows and 30 columns per sheet): no formatting, merged cells, or charts.
 - PDF previews work; PDF text search does not yet. Images are not OCR'd.
 

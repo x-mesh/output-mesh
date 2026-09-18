@@ -46,6 +46,7 @@ const state = {
   searchOpen: {},
   detail: null,
   changes: [],
+  hiddenChanges: {},
   period: 'all',
 };
 // 선택할 때 트리를 다시 그리면 스크롤과 포커스가 튄다. 노드를 들고 있다가 속성만 바꾼다.
@@ -330,10 +331,13 @@ async function loadFacets() {
 
 async function loadChanges() {
   try {
-    state.changes = (await api(`/api/changes?${searchParams({ limit: CHANGE_FEED_LIMIT })}`)).changes;
+    const data = await api(`/api/changes?${searchParams({ limit: CHANGE_FEED_LIMIT })}`);
+    state.changes = data.changes;
+    state.hiddenChanges = data.hidden ?? {};
   } catch {
     // 변경 목록은 보조 정보다. 못 받아도 트리와 개요는 그대로 그린다.
     state.changes = [];
+    state.hiddenChanges = {};
   }
 }
 
@@ -1221,7 +1225,20 @@ function changesPanel() {
               change.source === 'disk' && el('span', { className: 'change-outside', title: t('changes.outsideTitle') }, t('changes.outside')),
             ])),
             el('span', { className: 'when', title: fmtDate(change.at) }, relativeWhen(change.at))))))
-      : el('p', { className: 'hint' }, t('changes.empty')));
+      : el('p', { className: 'hint' }, t('changes.empty')),
+    hiddenChangesLine());
+}
+
+/** 라이브러리가 숨긴 종류의 변경. 누르면 그 종류로 좁혀 목록과 이 피드에 보인다. */
+function hiddenChangesLine() {
+  const entries = Object.entries(state.hiddenChanges).filter(([, n]) => n > 0);
+  if (entries.length === 0) return null;
+  return el('p', { className: 'changes-hidden hint' },
+    t('changes.hidden'), ' ',
+    ...entries.flatMap(([kind, n], i) => keep([
+      i > 0 && ' · ',
+      el('button', { type: 'button', className: 'link', onclick: () => toggleFilter('kind', kind) }, t('changes.hiddenKind', { kind: kindLabel(kind), n })),
+    ])));
 }
 
 function homeList(title, rows, empty) {
