@@ -76,6 +76,7 @@ output-mesh sweep            # 한 번 수집하고 끝낸다
 output-mesh import <경로>    # 폴더나 파일을 등록한다(복사하지 않는다)
 output-mesh coverage         # 무엇이 왜 빠졌는지
 output-mesh doctor           # 출처 경로, 데이터베이스, FTS5 상태
+output-mesh --version        # 버전 (탐색기 바닥줄에도 보인다)
 ```
 
 모든 명령은 `--db <경로>` 로 다른 카탈로그 파일을 쓸 수 있다.

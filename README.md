@@ -76,6 +76,7 @@ output-mesh sweep            # collect once and exit
 output-mesh import <path>    # register a folder or file (never copied)
 output-mesh coverage         # what was excluded and why
 output-mesh doctor           # source paths, database, and FTS5 health
+output-mesh --version        # print the version (also shown in the explorer footer)
 ```
 
 All commands accept `--db <path>` to use a different catalog file.
