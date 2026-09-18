@@ -121,6 +121,11 @@ describe('API', () => {
     expect(fallback.rows.length).toBe(fallback.total);
   });
 
+  test('시트 미리보기는 스프레드시트만 받는다 — 경로는 DB 에서만 온다', async () => {
+    expect((await get(`/api/artifact/${htmlId}/sheet`)).status).toBe(422);
+    expect((await get('/api/artifact/999999/sheet')).status).toBe(404);
+  });
+
   test('태그를 붙이면 즉시 검색된다', async () => {
     await post(`/api/artifact/${htmlId}/tag`, { name: '데모' });
     const { rows } = await (await get('/api/search?q=' + encodeURIComponent('데모'))).json();

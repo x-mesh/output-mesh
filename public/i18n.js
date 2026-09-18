@@ -101,6 +101,11 @@
       'preview.bundleFiles': ({ n }) => `${num(n)}개 파일`,
       'preview.loading': '불러오는 중…', 'preview.unsupported': '이 형식은 미리보기를 지원하지 않습니다.',
       'preview.loadFailed': '불러오지 못했습니다.',
+      'sheet.empty': '보여줄 시트가 없습니다.',
+      'sheet.untitled': ({ n }) => `시트 ${n}`,
+      'sheet.more': ({ n }) => `시트 ${num(n)}개 더 (미리보기 생략)`,
+      'sheet.truncated': ({ rows, cols }) => `앞부분만 보입니다 (전체 ${num(rows)}행 × ${num(cols)}열)`,
+      'sheet.valuesOnly': '값만 보여줍니다. 서식, 병합, 차트는 보이지 않고 수식은 계산된 값이 나옵니다.',
 
       'origins.title': ({ n }) => `출처 · 세션 ${num(n)}개`,
       'origins.deliverable': '산출물', 'untitled': '(제목 없음)',
@@ -239,6 +244,11 @@
       'preview.bundleFiles': ({ n }) => count(n, 'file', 'files'),
       'preview.loading': 'Loading…', 'preview.unsupported': 'This format can’t be previewed.',
       'preview.loadFailed': 'Couldn’t load the file.',
+      'sheet.empty': 'No sheets to show.',
+      'sheet.untitled': ({ n }) => `Sheet ${n}`,
+      'sheet.more': ({ n }) => `${count(n, 'more sheet', 'more sheets')} not previewed`,
+      'sheet.truncated': ({ rows, cols }) => `Showing the beginning only (${num(rows)} rows × ${num(cols)} columns in total)`,
+      'sheet.valuesOnly': 'Values only. Formatting, merged cells, and charts aren’t shown; formulas show their last calculated value.',
 
       'origins.title': ({ n }) => `Sources · ${count(n, 'session', 'sessions')}`,
       'origins.deliverable': 'Deliverable', 'untitled': '(untitled)',

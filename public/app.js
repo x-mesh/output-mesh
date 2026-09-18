@@ -920,6 +920,8 @@ function previewFor(detail) {
     return el('div', { className: 'preview-fill', id: 'text-preview' }, el('p', { className: 'preview-note hint' }, t('preview.loading')));
   }
   switch (detail.kind) {
+    case 'sheet':
+      return sheetPreview(detail);
     case 'image':
       return el('div', { className: 'preview-image' }, el('img', { src, alt: detail.file_name, loading: 'lazy' }));
     case 'pdf':
@@ -935,6 +937,67 @@ function previewFor(detail) {
         el('p', {}, t('preview.unsupported')),
         el('button', { type: 'button', onclick: () => post(`/api/artifact/${detail.id}/reveal`, {}) }, t('action.reveal')));
   }
+}
+
+// ── 스프레드시트 ─────────────────────────────────────────────────────────
+// 서버가 앞부분(행·열 상한)만 값으로 보낸다. 서식·병합·차트는 없다 — 그 사실을 표 아래에 적는다.
+
+const LETTERS = 26;
+const CHAR_A = 'A'.charCodeAt(0);
+const columnName = (index) => {
+  let name = '';
+  for (let n = index + 1; n > 0; n = Math.floor((n - 1) / LETTERS)) name = String.fromCharCode(CHAR_A + ((n - 1) % LETTERS)) + name;
+  return name;
+};
+const NUMERIC = /^-?\d+(\.\d+)?(E[+-]?\d+)?$/i;
+// 엑셀이 저장한 부동소수점 꼬리(0.30000000000000004)를 잘라 보이되 원래 값은 title 에 남긴다.
+const SHEET_FRACTION_DIGITS = 6;
+
+function sheetTable(sheet) {
+  const head = el('tr', {}, el('th', { className: 'corner' }),
+    ...Array.from({ length: sheet.columns }, (_, i) => el('th', {}, columnName(i))));
+  const body = sheet.rows.map((row) => el('tr', {}, el('th', {}, row.n),
+    ...row.cells.slice(0, sheet.columns).map((value) => NUMERIC.test(value)
+      // 'min2' 는 다섯 자리부터 자릿수를 가른다. 연도(2018)가 2,018 로 보이지 않는다.
+      ? el('td', { className: 'num', title: value }, Number(value).toLocaleString(locale(), { maximumFractionDigits: SHEET_FRACTION_DIGITS, useGrouping: 'min2' }))
+      : el('td', { title: value }, value))));
+  return el('div', { className: 'sheet-scroll' },
+    el('table', { className: 'sheet-table' }, el('thead', {}, head), el('tbody', {}, ...body)));
+}
+
+function sheetPreview(detail) {
+  const box = el('div', { className: 'preview-fill sheet' }, el('p', { className: 'preview-note hint' }, t('preview.loading')));
+  api(`/api/artifact/${detail.id}/sheet`)
+    .then((data) => {
+      if (state.selected !== detail.id || !box.isConnected) return;
+      if (!data.sheets?.length) {
+        box.replaceChildren(el('p', { className: 'preview-note' }, t('sheet.empty')));
+        return;
+      }
+      const tabs = el('div', { className: 'sheet-tabs', attrs: { role: 'tablist' } });
+      const body = el('div', { className: 'sheet-body' });
+      const show = (index) => {
+        const sheet = data.sheets[index];
+        tabs.replaceChildren(...keep([...data.sheets.map((each, i) =>
+          el('button', {
+            type: 'button',
+            attrs: { role: 'tab', 'aria-selected': String(i === index) },
+            onclick: () => show(i),
+          }, each.name || t('sheet.untitled', { n: i + 1 }))),
+          data.moreSheets > 0 && el('span', { className: 'sheet-more hint' }, t('sheet.more', { n: data.moreSheets }))]));
+        body.replaceChildren(
+          sheetTable(sheet),
+          el('p', { className: 'sheet-note hint' },
+            sheet.truncated ? `${t('sheet.truncated', { rows: sheet.totalRows, cols: sheet.totalCols })} · ` : '',
+            t('sheet.valuesOnly')));
+      };
+      show(0);
+      box.replaceChildren(tabs, body);
+    })
+    .catch(() => {
+      if (box.isConnected) box.replaceChildren(el('p', { className: 'preview-note danger' }, t('preview.loadFailed')));
+    });
+  return box;
 }
 
 /** 이 파일을 건드린 세션들. 대표만 보이면 나머지 세션에서 무엇을 했는지가 사라진다. */
