@@ -1820,6 +1820,7 @@ document.addEventListener('langchange', () => {
   renderPeriod();
   renderGroupBy();
   renderThemeButton();
+  renderVersion();
   setModeState(state.mode);
   if ($('live').dataset.status) renderLive($('live').dataset.status);
   if (state.view === 'detail' && state.detail) render(state.detail);
@@ -1828,6 +1829,22 @@ document.addEventListener('langchange', () => {
 });
 renderLang();
 renderPeriod();
+
+// 버전은 바닥줄에 작게 둔다. 자주 보는 정보가 아니라 버그를 알리거나 새 버전이 받아졌는지 볼 때 쓴다.
+let version = null;
+function renderVersion() {
+  if (!version) return;
+  $('version').textContent = `v${version}`;
+  $('version').title = t('version.title', { version });
+}
+api('/api/version')
+  .then((info) => {
+    version = info.version;
+    renderVersion();
+  })
+  .catch(() => {
+    // 버전을 못 받아도 화면은 그대로 쓴다.
+  });
 
 // ── 테마 ───────────────────────────────────────────────────────────────
 // 시스템 설정 → 라이트 → 다크 순서로 돈다. 정하는 일은 theme.js 가 하고 여기는 버튼만 그린다.
