@@ -101,6 +101,7 @@ bun bin/output-mesh.mjs doctor          # 상태 점검
 - 추출 실패는 `skipped`(불가)와 `failed`(시도했으나 실패)로 구분한다. 조용한 빈 본문 금지.
 - 긴 수집 루프는 `COLLECT_YIELD_MS` 마다 `setTimeout(0)` 으로 양보한다. 로그 파싱이 동기라 양보하지 않으면 Ctrl-C 가 안 먹히고, 서버가 뜬 뒤에는 주기 수집 동안 HTTP 요청이 멈춘다. Bun 의 `setImmediate` 로는 밀린 타이머가 차례를 얻지 못했다.
 - 수집 진행 보고(`onProgress`)는 `serve` 의 첫 수집에만 단다. 주기 수집과 `/api/sweep` 은 조용해야 한다.
+- 변경 기록(`artifact_events`)은 `ingestFile` 과 `markMissing` 안에서만 남긴다. 내용이 그대로인 `touched` 는 남기지 않는다. 빈 카탈로그의 첫 수집은 `quietEvents` 로 조용히 한다.
 - 클라이언트가 준 문자열이 파일시스템에 닿는 경로를 만들지 않는다. 서빙 경로는 DB 조회로만.
 - 목록과 사이드바는 같은 파라미터를 쓴다. `filtersFrom(url)`(서버)과 `searchParams()`(클라이언트)가 한 곳이다. 갈라지면 사이드바가 목록에 없는 것을 광고한다.
 - 정적 파일은 `cache-control: no-store` 로 보낸다. 검증자 없이 캐시되면 편집한 UI 가 새로고침에도 안 바뀌어, 자기 수정을 눈으로 확인할 수 없다.
