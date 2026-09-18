@@ -165,6 +165,18 @@ describe('워처와 변경 목록', () => {
     expect(changes[0].location).toMatchObject({ dir: '/' });
   });
 
+  test('디스크에서 본 변경에도 파일을 만든 에이전트가 따라온다 — 화면이 누구 파일인지 달 수 있게', async () => {
+    const path = join(dir, 'notes.md');
+    writeFileSync(path, '처음');
+    await ingestFile(store, path, codex);
+    await ingestFile(store, path, { collector: 'claude-code', provider: 'claude-code', sessionRef: 's2' });
+    writeFileSync(path, '사람이 손으로 고침');
+    await recheckKnownFiles(store);
+
+    const [latest] = recentChanges(store, '', { view: 'library' }).changes;
+    expect(latest).toMatchObject({ change: 'modified', source: 'disk', collector: null, collectors: ['claude-code', 'codex'] });
+  });
+
   test('오래된 기록은 지운다', async () => {
     const path = join(dir, 'old.md');
     writeFileSync(path, 'x');

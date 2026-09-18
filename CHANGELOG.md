@@ -12,6 +12,7 @@ lives in `package.json`; `output-mesh --version` and the explorer footer show it
 
 - **collect:** documents in repositories an agent has worked in, including the ones an agent writes through the shell. The first run adds documents changed in the last 7 days; after that each repository is watched and new or edited documents show up within seconds. Source code is not collected this way
 - **overview:** the "Just happened" feed says how many code and other changes the library hides, and one click shows them
+- **overview:** each change in "Just happened" names its agent (Codex, Claude Code, Aside). A change seen on disk shows the agents that made the file with a dashed outline, since who made that change is unknown
 
 ### Changed
 
