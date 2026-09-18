@@ -1,11 +1,11 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { appendFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { MAX_PROMPT_CHARS, claudeWrites, codexWrites, isIndexablePath, logFilesSince, looksLikePrompt } from '../lib/session-logs.mjs';
+import { MAX_PROMPT_CHARS, claudeWrites, codexWrites, isIndexablePath, logFilesSince, looksLikePrompt, newLogTail } from '../lib/session-logs.mjs';
 import { CatalogStore } from '../lib/store.mjs';
 import { sweepSessionLogs } from '../lib/collector.mjs';
-import { nfc } from '../lib/paths.mjs';
+import { LOG_READ_CHUNK_BYTES, nfc } from '../lib/paths.mjs';
 
 let dir;
 let logs;
@@ -292,5 +292,80 @@ describe('Codex 스레드와 대화', () => {
       { type: 'response_item', payload: { input: '*** Update File: src/a.swift' } },
     ]);
     expect(codexWrites(path)[0].prompt).toBe('실제 지시');
+  });
+});
+
+describe('자라는 로그는 새로 붙은 줄만 읽는다', () => {
+  const line = (entry) => `${JSON.stringify(entry)}\n`;
+  const write = (sessionId, file) => line({ sessionId, cwd: repo, message: { content: [{ type: 'tool_use', name: 'Write', input: { file_path: join(repo, file) } }] } });
+
+  test('두 번째 읽기는 붙은 줄의 쓰기만 돌려주고, 앞에서 알아낸 세션·첫 발화는 그대로 쓴다', () => {
+    const path = join(logs, 'live.jsonl');
+    writeFileSync(path, line({ sessionId: 'live', cwd: repo, message: { role: 'user', content: '문서를 정리해줘' } }) + write('live', 'a.md'));
+    const tail = newLogTail();
+    expect(claudeWrites(path, tail).map((w) => w.path)).toEqual([join(repo, 'a.md')]);
+
+    appendFileSync(path, write('live', 'b.md'));
+    expect(claudeWrites(path, tail)).toEqual([{ path: join(repo, 'b.md'), sessionRef: 'live', workspace: repo, at: null, prompt: '문서를 정리해줘' }]);
+    expect(claudeWrites(path, tail)).toEqual([]);
+  });
+
+  test('쓰는 중인 마지막 줄은 남겨 두었다가 완성되면 읽는다', () => {
+    const path = join(logs, 'half.jsonl');
+    const whole = write('half', 'late.md');
+    writeFileSync(path, write('half', 'a.md') + whole.slice(0, 40));
+    const tail = newLogTail();
+    expect(claudeWrites(path, tail).map((w) => w.path)).toEqual([join(repo, 'a.md')]);
+
+    appendFileSync(path, whole.slice(40));
+    expect(claudeWrites(path, tail).map((w) => w.path)).toEqual([join(repo, 'late.md')]);
+  });
+
+  test('파일이 줄었거나 바뀌었으면 처음부터 다시 읽는다', () => {
+    const path = join(logs, 'reset.jsonl');
+    writeFileSync(path, write('one', 'a.md') + write('one', 'b.md'));
+    const tail = newLogTail();
+    claudeWrites(path, tail);
+
+    writeFileSync(path, write('two', 'c.md'));
+    expect(claudeWrites(path, tail)).toMatchObject([{ path: join(repo, 'c.md'), sessionRef: 'two' }]);
+  });
+
+  test('Codex: 세션 정보는 첫 조각, 패치는 뒤 조각에 있어도 cwd 로 경로를 푼다. 서브에이전트는 마지막 지시를 쓴다', () => {
+    const path = join(logs, 'rollout-live.jsonl');
+    writeFileSync(path, line({ type: 'session_meta', payload: { id: 'child', session_id: 'parent', cwd: repo } })
+      + line({ type: 'response_item', payload: { type: 'message', role: 'user', content: [{ type: 'input_text', text: '첫 지시' }] } }));
+    const tail = newLogTail();
+    expect(codexWrites(path, tail)).toEqual([]);
+
+    appendFileSync(path, line({ type: 'response_item', payload: { type: 'message', role: 'user', content: [{ type: 'input_text', text: '두 번째 지시' }] } })
+      + line({ type: 'response_item', payload: { input: '*** Add File: src/new.rs' } }));
+    expect(codexWrites(path, tail)).toMatchObject([{ path: join(repo, 'src/new.rs'), sessionRef: 'child', conversationRef: 'parent', isRoot: false, workspace: repo, prompt: '두 번째 지시' }]);
+  });
+
+  test('읽기 조각 경계에 걸친 줄과 한글도 깨지지 않는다', () => {
+    const path = join(logs, 'rollout-big.jsonl');
+    const head = line({ type: 'session_meta', payload: { id: 'big', cwd: repo } });
+    const filler = line({ type: 'event_msg', payload: { text: '가나다'.repeat(1000) } });
+    const count = Math.ceil(LOG_READ_CHUNK_BYTES / Buffer.byteLength(filler)) + 1;
+    const body = [head];
+    for (let i = 0; i < count; i++) body.push(i === count - 2 ? line({ type: 'response_item', payload: { input: '*** Add File: src/경계.rs' } }) : filler);
+    writeFileSync(path, body.join(''));
+    expect(Buffer.byteLength(body.join(''))).toBeGreaterThan(LOG_READ_CHUNK_BYTES);
+
+    expect(codexWrites(path).map((w) => w.path)).toEqual([join(repo, 'src/경계.rs')]);
+  });
+
+  test('수집기가 읽은 위치를 들고 있으면 이미 넣은 경로를 다시 넣지 않는다', async () => {
+    writeFileSync(join(repo, 'src', 'one.mjs'), '1');
+    writeFileSync(join(repo, 'src', 'two.mjs'), '2');
+    const path = join(logs, 'rollout-sweep.jsonl');
+    writeFileSync(path, line({ type: 'session_meta', payload: { id: 's', cwd: repo } }) + line({ type: 'response_item', payload: { input: '*** Add File: src/one.mjs' } }));
+    const source = { collector: 'codex', provider: 'openai-codex', root: logs, suffix: '.jsonl', cursorKey: 'codex.scanned_until', parse: codexWrites };
+    const tails = new Map();
+    expect(await sweepSessionLogs(store, source, { tails })).toMatchObject({ paths: 1 });
+
+    appendFileSync(path, line({ type: 'response_item', payload: { input: '*** Add File: src/two.mjs' } }));
+    expect(await sweepSessionLogs(store, source, { tails })).toMatchObject({ logs: 1, paths: 1, inserted: 1 });
   });
 });
