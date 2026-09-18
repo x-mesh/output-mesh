@@ -1371,7 +1371,6 @@ async function renderHome() {
 
 function dashboard(activity) {
   const finals = state.rows.filter((r) => r.state === 'final');
-  const recent = state.rows.filter((r) => r.state !== 'final').sort((a, b) => b.mtime - a.mtime);
   const repos = new Set(state.rows.map((r) => r.location?.repo).filter(Boolean));
 
   return el('div', { className: 'dash' },
@@ -1382,10 +1381,10 @@ function dashboard(activity) {
         [state.period !== 'all' && t(`periodTitle.${state.period}`), t('home.count', { n: state.total }), t('home.finals', { n: finals.length }), t('home.repos', { n: repos.size })].filter(Boolean).join(' · '))),
     activity ? activityPanel(activity) : el('p', { className: 'hint' }, t('home.activityFailed')),
     distributions(),
-    changesPanel(),
-    el('div', { className: 'dash-grid' },
-      homeList(t('home.finalsTitle'), finals.slice(0, HOME_LIST_COUNT), t('home.finalsEmpty')),
-      homeList(t('home.recentTitle'), recent.slice(0, HOME_LIST_COUNT), t('home.recentEmpty'))),
+    // "최근 바뀐 것" 목록은 두지 않는다. 방금 일어난 일이 같은 파일을 무엇이 · 누가 · 언제까지 더 말한다.
+    el('div', { className: 'dash-lists' },
+      changesPanel(),
+      homeList(t('home.finalsTitle'), finals.slice(0, HOME_LIST_COUNT), t('home.finalsEmpty'))),
     el('p', { className: 'keys' },
       el('span', {}, kbd('↑'), kbd('↓'), ` ${t('keys.move')}`),
       el('span', {}, kbd('←'), kbd('→'), ` ${t('keys.fold')}`),

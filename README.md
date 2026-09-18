@@ -60,7 +60,7 @@ The library shows documents, web pages, images, spreadsheets, and bundles. Sourc
 
 **Explorer (left).** Search, a period (all, today, 7, 30, 90 days), collapsible filters, and a tree. Group the tree by repository, agent, app, date, or kind. Every file shows a subtitle: the document's own title, or the task that created it when the title says nothing ("README", "Product").
 
-**Overview (right, nothing selected).** Agent activity per hour, day, or week depending on the period, plus breakdowns by kind, agent, and workspace. Every bar is a filter.
+**Overview (right, nothing selected).** Agent activity per hour, day, or week depending on the period, plus breakdowns by kind, agent, and workspace. Every bar is a filter. Below them, "Just happened" lists each file created, changed, moved, or removed with the agent behind it, and scrolls back through the last 30 days; final files sit beside it.
 
 **Detail (right, file selected).** The preview takes the space. Markdown renders with its front matter shown as a table. The inspector lists every session that touched the file, with tags, notes, and a "final" mark.
 

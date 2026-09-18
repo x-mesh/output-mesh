@@ -16,8 +16,9 @@ lives in `package.json`; `output-mesh --version` and the explorer footer show it
 
 ### Changed
 
-- the overview reads top to bottom as charts, then lists: activity, the kind / agent / workspace breakdowns, "Just happened", then final and recent files
+- the overview reads top to bottom as charts, then lists: activity, the kind / agent / workspace breakdowns, then "Just happened" beside the final files
 - "Just happened" scrolls inside its own box and loads older changes as you reach the end, 30 at a time, instead of stopping at the latest 8
+- removed the "Recently changed" list from the overview; "Just happened" shows the same files with what changed, which agent, and when
 - changes found by watching the disk are labeled "seen on disk" instead of "outside an agent", since an agent may have made them through the shell
 - files you import and documents found in repositories no longer count as agent sessions in the activity graph or the 24-hour count
 
