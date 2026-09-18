@@ -1221,12 +1221,30 @@ function changesPanel() {
             el('span', { className: 'change-name' }, change.file_name),
             el('span', { className: 'change-where' }, ...locationNodes(change)),
             el('span', { className: 'change-tags' }, ...keep([
-              change.provider && el('span', { className: 'chip static', attrs: { 'data-provider': change.provider } }, PROVIDER_LABEL[change.provider] ?? change.provider),
+              ...changeAgents(change),
               change.source === 'disk' && el('span', { className: 'change-outside', title: t('changes.outsideTitle') }, t('changes.outside')),
             ])),
             el('span', { className: 'when', title: fmtDate(change.at) }, relativeWhen(change.at))))))
       : el('p', { className: 'hint' }, t('changes.empty')),
     hiddenChangesLine());
+}
+
+/**
+ * 누가 했나. 에이전트 기록으로 본 변경은 그 에이전트다. 디스크에서 본 변경은 누가 바꿨는지 모르므로
+ * 파일을 만든 에이전트를 흐리게 단다 — Codex 가 만든 설정 파일을 앱이 스스로 고친 경우가 실제로 있다.
+ * 앱 단위(Codex · Claude Code · Aside)로 단다. 활동 카드와 같은 이름이다.
+ */
+function changeAgents(change) {
+  if (change.source === 'agent') return change.collector ? [agentChip(change.collector)] : [];
+  return (change.collectors ?? []).filter((collector) => collector in COLLECTOR_NAME).map((collector) => agentChip(collector, { owner: true }));
+}
+
+function agentChip(collector, { owner = false } = {}) {
+  const name = collectorLabel(collector);
+  return el('span', {
+    className: owner ? 'chip static owner' : 'chip static',
+    attrs: { 'data-provider': PROVIDER_OF_COLLECTOR[collector] ?? collector, title: owner ? t('changes.ownerTitle', { name }) : null },
+  }, name);
 }
 
 /** 라이브러리가 숨긴 종류의 변경. 누르면 그 종류로 좁혀 목록과 이 피드에 보인다. */

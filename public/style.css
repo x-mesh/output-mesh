@@ -391,6 +391,7 @@ kbd {
 .chip::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--series, var(--aside)); }
 button.chip:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
 .chip.static { cursor: default; }
+.chip.owner { border-style: dashed; background: transparent; color: var(--text-dim); }
 
 .where-repo { font-weight: 600; color: var(--text); white-space: nowrap; }
 .where-dir { font-family: var(--mono); font-size: var(--text-xs); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
