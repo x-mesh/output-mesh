@@ -1,0 +1,23 @@
+base_branch: main
+
+preflight:
+  steps:
+    - name: branch-check
+      command: branch-check
+      continue_on_failure: false
+    - name: no-conflict
+      command: no-conflict
+      continue_on_failure: false
+    - name: test
+      command: bun test
+      continue_on_failure: false
+
+ship:
+  version_files:
+    - package.json
+
+# Manifest detection proposes `npm install`; this repo is bun.
+worktree:
+  init:
+    run:
+      - bun install
