@@ -1,4 +1,12 @@
 const $ = (id) => document.getElementById(id);
+// 문구는 i18n.js 사전에서 온다. 언어는 바뀔 수 있으므로 호출할 때마다 현재 값을 읽는다.
+const { t, num } = globalThis.i18n;
+const locale = () => globalThis.i18n.locale();
+/** 사전에 없는 값(새 수집기, 새 제외 이유)은 키 대신 원래 값을 보인다. */
+const tOr = (key, fallback) => {
+  const text = t(key);
+  return text === key ? fallback : text;
+};
 
 // 서버가 MAX_SEARCH_LIMIT 에서 자른다. 트리는 저장소별로 묶어야 해서 라이브러리 전체가 필요하다.
 const TREE_LIMIT = 5000;
@@ -10,12 +18,9 @@ const LIVE_COALESCE_MS = 400;
 const SEARCH_DEBOUNCE_MS = 120;
 const ACTIVITY_FILTERS = new Set(['collector', 'workspace']);
 // 기간 값은 서버의 PERIOD_DAYS 키와 같다. 시작 시각은 서버가 정한다 — 목록·현황·그래프가 같은 자정을 쓴다.
-const PERIODS = [['all', '전체'], ['today', '오늘'], ['7d', '7일'], ['30d', '30일'], ['90d', '90일']];
-const PERIOD_TITLE = { all: '전체 기간 · 주별', today: '오늘 · 시간별', '7d': '최근 7일', '30d': '최근 30일', '90d': '최근 90일' };
-const PERIOD_NAME = { all: '지금까지', today: '오늘', '7d': '최근 7일 동안', '30d': '최근 30일 동안', '90d': '최근 90일 동안' };
-const UNIT_HEADER = { hour: '시각', day: '날짜', week: '주' };
+const PERIODS = ['all', 'today', '7d', '30d', '90d'];
 // 탐색기 트리의 첫 단. 저장소가 기본이고, 나머지는 첫 단만 바꾸고 둘째 단은 위치(저장소·작업)다.
-const GROUPINGS = { repo: '저장소', provider: '에이전트', collector: '앱', date: '날짜', kind: '종류' };
+const GROUPINGS = ['repo', 'provider', 'collector', 'date', 'kind'];
 
 const state = {
   q: '',
@@ -64,7 +69,7 @@ const prefs = {
 const openState = prefs.read('tree.open', {});
 const facetOpen = prefs.read('facets.open', { kind: true });
 let inspectorOpen = prefs.read('inspector.open', true);
-let groupBy = GROUPINGS[prefs.read('tree.groupBy', 'repo')] ? prefs.read('tree.groupBy', 'repo') : 'repo';
+let groupBy = GROUPINGS.includes(prefs.read('tree.groupBy', 'repo')) ? prefs.read('tree.groupBy', 'repo') : 'repo';
 
 const api = async (path, options) => {
   const res = await fetch(path, options);
@@ -80,7 +85,7 @@ const fmtBytes = (n) => {
   if (n < 1024 ** 2) return `${(n / 1024).toFixed(0)} KB`;
   return `${(n / 1024 ** 2).toFixed(1)} MB`;
 };
-const fmtDate = (unix) => (unix ? new Date(unix * 1000).toLocaleString('ko-KR', { dateStyle: 'medium', timeStyle: 'short' }) : '—');
+const fmtDate = (unix) => (unix ? new Date(unix * 1000).toLocaleString(locale(), { dateStyle: 'medium', timeStyle: 'short' }) : '—');
 
 const MINUTE = 60;
 const HOUR = 60 * MINUTE;
@@ -89,20 +94,21 @@ const WEEK = 7 * DAY;
 
 function relativeWhen(unix) {
   const age = Date.now() / 1000 - unix;
-  if (age < MINUTE) return '방금';
-  if (age < HOUR) return `${Math.floor(age / MINUTE)}분 전`;
-  if (age < DAY) return `${Math.floor(age / HOUR)}시간 전`;
-  return age < WEEK ? `${Math.floor(age / DAY)}일 전` : fmtDate(unix);
+  if (age < MINUTE) return t('time.justNow');
+  // 언어마다 "3분 전", "3 minutes ago", 하루 전은 "어제", "yesterday" 가 된다.
+  const relative = new Intl.RelativeTimeFormat(locale(), { numeric: 'auto' });
+  if (age < HOUR) return relative.format(-Math.floor(age / MINUTE), 'minute');
+  if (age < DAY) return relative.format(-Math.floor(age / HOUR), 'hour');
+  return age < WEEK ? relative.format(-Math.floor(age / DAY), 'day') : fmtDate(unix);
 }
 
 /** 트리 한 줄에 들어가는 짧은 시각. 일주일이 넘으면 날짜만. */
 function shortWhen(unix) {
   const age = Date.now() / 1000 - unix;
-  if (age < HOUR) return `${Math.max(1, Math.floor(age / MINUTE))}분`;
-  if (age < DAY) return `${Math.floor(age / HOUR)}시간`;
-  if (age < WEEK) return `${Math.floor(age / DAY)}일`;
-  const date = new Date(unix * 1000);
-  return `${date.getMonth() + 1}. ${date.getDate()}.`;
+  if (age < HOUR) return t('short.minutes', { n: Math.max(1, Math.floor(age / MINUTE)) });
+  if (age < DAY) return t('short.hours', { n: Math.floor(age / HOUR) });
+  if (age < WEEK) return t('short.days', { n: Math.floor(age / DAY) });
+  return new Date(unix * 1000).toLocaleDateString(locale(), { month: 'numeric', day: 'numeric' });
 }
 
 // 목록의 문자열은 전부 에이전트가 쓴 파일과 로그에서 온다. 텍스트 노드로만 넣는다 —
@@ -156,13 +162,13 @@ function icon(name, className = '') {
 }
 
 const PROVIDER_LABEL = { 'openai-codex': 'Codex', 'claude-code': 'Claude Code', 'ai-mesh': 'ai-mesh', aside: 'Aside' };
-const COLLECTOR_LABEL = { codex: 'Codex', 'claude-code': 'Claude Code', aside: 'Aside', import: '가져옴' };
-const STATE_LABEL = { discovered: '발견', final: '최종본' };
+const COLLECTOR_NAME = { codex: 'Codex', 'claude-code': 'Claude Code', aside: 'Aside' };
+const collectorLabel = (collector) => COLLECTOR_NAME[collector] ?? tOr(`collector.${collector}`, t('collector.import'));
+const stateLabel = (value) => tOr(`state.${value}`, value);
+const kindLabel = (value) => tOr(`kind.${value ?? 'unclassified'}`, value);
 // 활동 카드는 수집기 이름을 단다. Aside 가 실어 온 Claude 세션에 Claude 색을 칠하면 수집기를 잘못 말한다.
 const PROVIDER_OF_COLLECTOR = { codex: 'openai-codex', 'claude-code': 'claude-code' };
-const FILTER_LABEL = { kind: '종류', provider: '에이전트', collector: '수집기', state: '상태', ext: '형식', tag: '태그', workspace: '작업공간' };
-const SUBTITLE_SOURCE_LABEL = { doc: '문서 제목', task: '만든 작업' };
-const BODY_STATE_LABEL = { indexed: '전문 검색 가능', skipped: '전문 검색 불가', failed: '본문 추출 실패', pending: '색인 대기' };
+const subtitleSource = (source) => tOr(`subtitle.${source}`, '');
 
 /** 출처에서 파생된 분류. 누르면 그 에이전트로 좁힌다 — 행 선택과 겹치지 않게 전파를 끊는다. */
 function providerChips(providers) {
@@ -170,7 +176,7 @@ function providerChips(providers) {
     el('button', {
       type: 'button',
       className: 'chip',
-      title: `${PROVIDER_LABEL[provider] ?? provider} 만 보기`,
+      title: t('chip.only', { name: PROVIDER_LABEL[provider] ?? provider }),
       attrs: { 'data-provider': provider },
       onclick: (event) => {
         event.stopPropagation();
@@ -183,18 +189,18 @@ function badges(row, { compact = false } = {}) {
   return keep([
     // 여러 에이전트가 손댄 파일은 충돌이 아니라 중요도의 신호다.
     // SQLite 불리언은 0/1 이다. `0 && …` 은 0 을 남겨 화면에 "0" 이 찍힌다.
-    !compact && (row.providers?.length ?? 0) > 1 && el('span', { className: 'badge multi' }, `에이전트 ${row.providers.length}`),
-    !compact && Boolean(row.bundle_files) && el('span', { className: 'badge' }, `폴더 · ${row.bundle_files}개`),
-    Boolean(row.missing_at) && el('span', { className: 'badge missing' }, '원본 없음'),
-    row.state === 'final' && el('span', { className: 'badge final' }, '최종본'),
-    Boolean(row.favorite) && el('span', { className: 'badge fav', title: '즐겨찾기' }, '★'),
+    !compact && (row.providers?.length ?? 0) > 1 && el('span', { className: 'badge multi' }, t('badge.agents', { n: row.providers.length })),
+    !compact && Boolean(row.bundle_files) && el('span', { className: 'badge' }, t('badge.bundle', { n: row.bundle_files })),
+    Boolean(row.missing_at) && el('span', { className: 'badge missing' }, t('badge.missing')),
+    row.state === 'final' && el('span', { className: 'badge final' }, t('badge.final')),
+    Boolean(row.favorite) && el('span', { className: 'badge fav', title: t('badge.favorite') }, '★'),
   ]);
 }
 
 /** 저장소 안이면 저장소 이름 + 저장소 안 경로, 밖이면 실제 경로, 작업공간이 없으면 수집기. */
 function locationNodes(row) {
   const where = row.location;
-  if (!where) return [el('span', {}, COLLECTOR_LABEL[row.collector] ?? '가져옴')];
+  if (!where) return [el('span', {}, collectorLabel(row.collector))];
   return keep([
     where.repo && el('span', { className: 'where-repo' }, where.repo),
     el('span', { className: 'where-dir', title: row.abs_path }, where.dir),
@@ -222,12 +228,12 @@ function activityParams() {
 const isSearching = () => state.q.trim() !== '' || Object.keys(state.filters).length > 0 || state.period !== 'all';
 
 function renderPeriod() {
-  $('period').replaceChildren(...PERIODS.map(([value, label]) =>
+  $('period').replaceChildren(...PERIODS.map((value) =>
     el('button', {
       type: 'button',
       attrs: { role: 'radio', 'aria-checked': String(state.period === value) },
       onclick: () => setPeriod(value),
-    }, label)));
+    }, t(`period.${value}`))));
 }
 
 function setPeriod(period) {
@@ -242,7 +248,7 @@ function setModeState(mode) {
   $('mode-library').setAttribute('aria-selected', String(mode === 'library'));
   $('mode-activity').setAttribute('aria-selected', String(mode === 'activity'));
   $('q').disabled = mode === 'activity';
-  $('q').placeholder = mode === 'activity' ? '활동 보기는 시간순이라 검색하지 않습니다' : '파일명 · 본문 · 작업 검색';
+  $('q').placeholder = t(mode === 'activity' ? 'search.disabled' : 'search.placeholder');
 }
 
 function setMode(mode) {
@@ -273,13 +279,13 @@ function resetLibrary() {
 
 function filterDisplay(key, value) {
   switch (key) {
-    case 'favorite': return '즐겨찾기';
-    case 'kind': return state.facets?.kinds.find((k) => k.value === value)?.label ?? value;
-    case 'provider': return `${FILTER_LABEL.provider}: ${PROVIDER_LABEL[value] ?? value}`;
-    case 'collector': return `${FILTER_LABEL.collector}: ${COLLECTOR_LABEL[value] ?? value}`;
-    case 'state': return STATE_LABEL[value] ?? value;
-    case 'workspace': return `${FILTER_LABEL.workspace}: ${String(value).split('/').pop()}`;
-    default: return `${FILTER_LABEL[key] ?? key}: ${value}`;
+    case 'favorite': return t('filter.favorite');
+    case 'kind': return kindLabel(value);
+    case 'provider': return `${t('filter.provider')}: ${PROVIDER_LABEL[value] ?? value}`;
+    case 'collector': return `${t('filter.collector')}: ${collectorLabel(value)}`;
+    case 'state': return stateLabel(value);
+    case 'workspace': return `${t('filter.workspace')}: ${String(value).split('/').pop()}`;
+    default: return `${tOr(`filter.${key}`, key)}: ${value}`;
   }
 }
 
@@ -288,7 +294,7 @@ function renderActiveFilters() {
     el('button', {
       type: 'button',
       className: 'token',
-      title: '이 필터 지우기',
+      title: t('filter.clearOne'),
       // summary 안의 버튼이라 기본 동작이 패널을 여닫는다. 토큰은 필터만 지운다.
       onclick: (event) => {
         event.preventDefault();
@@ -316,16 +322,16 @@ function renderFilters(data) {
   const shorten = (path) => path.split('/').slice(-2).join('/');
   const groups = state.mode === 'activity'
     ? [
-        ['collector', '수집기', data.collectors.map((c) => ({ ...c, display: COLLECTOR_LABEL[c.value] ?? c.value }))],
-        ['workspace', '작업공간', (data.workspaces ?? []).map((w) => ({ ...w, display: shorten(w.value) }))],
+        ['collector', t('filter.collector'), data.collectors.map((c) => ({ ...c, display: collectorLabel(c.value) }))],
+        ['workspace', t('filter.workspace'), (data.workspaces ?? []).map((w) => ({ ...w, display: shorten(w.value) }))],
       ]
     : [
-        ['kind', '종류', data.kinds.map((k) => ({ ...k, display: k.label }))],
-        ['provider', '에이전트', data.providers.map((p) => ({ ...p, display: PROVIDER_LABEL[p.value] ?? p.value }))],
-        ['state', '상태', data.states.map((s) => ({ ...s, display: STATE_LABEL[s.value] ?? s.value }))],
-        ['ext', '형식', data.exts],
-        ['collector', '수집기', data.collectors.map((c) => ({ ...c, display: COLLECTOR_LABEL[c.value] ?? c.value }))],
-        ['tag', '태그', data.tags],
+        ['kind', t('filter.kind'), data.kinds.map((k) => ({ ...k, display: kindLabel(k.value) }))],
+        ['provider', t('filter.provider'), data.providers.map((p) => ({ ...p, display: PROVIDER_LABEL[p.value] ?? p.value }))],
+        ['state', t('filter.state'), data.states.map((s) => ({ ...s, display: stateLabel(s.value) }))],
+        ['ext', t('filter.ext'), data.exts],
+        ['collector', t('filter.collector'), data.collectors.map((c) => ({ ...c, display: collectorLabel(c.value) }))],
+        ['tag', t('filter.tag'), data.tags],
       ];
 
   const favorite = state.mode === 'library' && el('button', {
@@ -333,7 +339,7 @@ function renderFilters(data) {
     className: 'facet',
     attrs: { 'aria-pressed': String(Boolean(state.filters.favorite)) },
     onclick: () => toggleFilter('favorite', true),
-  }, el('span', { className: 'facet-name' }, '★ 즐겨찾기만'));
+  }, el('span', { className: 'facet-name' }, t('facet.favoritesOnly')));
 
   const sections = groups.filter(([, , items]) => items?.length).map(([key, label, items]) => {
     const active = state.filters[key];
@@ -346,13 +352,13 @@ function renderFilters(data) {
         return el('button', {
           type: 'button',
           className: `facet${outOfScope ? ' out-of-scope' : ''}`,
-          title: outOfScope ? '라이브러리 밖입니다. 누르면 이 종류만 봅니다' : String(item.value),
+          title: outOfScope ? t('facet.outOfScopeTitle') : String(item.value),
           attrs: { 'aria-pressed': String(active === item.value) },
           onclick: () => toggleFilter(key, item.value),
         },
           el('span', { className: 'facet-name' }, item.display ?? item.value),
-          outOfScope && el('span', { className: 'facet-note' }, '라이브러리 밖'),
-          el('span', { className: 'n' }, item.n.toLocaleString('ko-KR')));
+          outOfScope && el('span', { className: 'facet-note' }, t('facet.outOfScope')),
+          el('span', { className: 'n' }, item.n.toLocaleString(locale())));
       }));
     group.addEventListener('toggle', () => {
       facetOpen[key] = group.open;
@@ -371,13 +377,13 @@ function renderFilters(data) {
     ? el('button', {
         type: 'button',
         className: 'link quiet-link',
-        title: '코드와 모르는 형식은 라이브러리에서 숨깁니다. 종류 필터로 꺼내 볼 수 있습니다',
+        title: t('facet.outsideTitle'),
         onclick: () => {
           $('filters').open = true;
           facetOpen.kind = true;
           renderFilters(state.facets);
         },
-      }, `라이브러리 밖 ${outside.toLocaleString('ko-KR')}개`)
+      }, t('facet.outsideCount', { n: outside }))
     : '');
 }
 
@@ -393,28 +399,28 @@ function renderStats() {
   if (!numbers) return;
   const stat = (n, label, { pressed, onclick, title }) =>
     el('button', { type: 'button', className: 'stat', title, onclick, attrs: { 'aria-pressed': String(pressed) } },
-      el('span', { className: 'stat-n' }, n.toLocaleString('ko-KR')),
+      el('span', { className: 'stat-n' }, n.toLocaleString(locale())),
       el('span', { className: 'stat-label' }, label));
   $('stats').replaceChildren(
-    stat(numbers.library, '라이브러리', {
+    stat(numbers.library, t('stat.library'), {
       pressed: state.mode === 'library' && !isSearching(),
       onclick: resetLibrary,
-      title: '검색어와 필터를 지우고 라이브러리 전체 보기',
+      title: t('stat.libraryTitle'),
     }),
-    stat(numbers.final, '최종본', {
+    stat(numbers.final, t('stat.final'), {
       pressed: state.mode === 'library' && state.filters.state === 'final',
       onclick: () => toggleFilter('state', 'final'),
-      title: '최종본으로 표시한 것만 보기',
+      title: t('stat.finalTitle'),
     }),
-    stat(numbers.recent, `최근 ${numbers.recentDays}일`, {
+    stat(numbers.recent, t('stat.recent', { n: numbers.recentDays }), {
       pressed: state.period === numbers.recentPeriod,
       onclick: () => setPeriod(state.period === numbers.recentPeriod ? 'all' : numbers.recentPeriod),
-      title: `최근 ${numbers.recentDays}일 동안 에이전트가 손댄 것만 보기 (기간 선택과 같다)`,
+      title: t('stat.recentTitle', { n: numbers.recentDays }),
     }),
-    stat(numbers.activeConversations, `${numbers.activeHours}시간 내 작업`, {
+    stat(numbers.activeConversations, t('stat.active', { n: numbers.activeHours }), {
       pressed: state.mode === 'activity',
       onclick: () => setMode(state.mode === 'activity' ? 'library' : 'activity'),
-      title: `최근 ${numbers.activeHours}시간 동안 파일을 쓴 대화. 누르면 활동 보기`,
+      title: t('stat.activeTitle', { n: numbers.activeHours }),
     }),
   );
 }
@@ -435,15 +441,15 @@ function treePlacement(row) {
   }
   if (where) {
     return {
-      group: { key: 'elsewhere', label: '저장소 밖', icon: 'folder' },
+      group: { key: 'elsewhere', label: t('tree.elsewhere'), icon: 'folder' },
       folders: [where.dir.replace(/\/$/, '')],
       folderIcon: 'folder',
       mono: true,
     };
   }
   return {
-    group: { key: `collector:${row.collector}`, label: COLLECTOR_LABEL[row.collector] ?? '가져옴', icon: 'session' },
-    folders: [row.session_title ?? '제목 없는 작업'],
+    group: { key: `collector:${row.collector}`, label: collectorLabel(row.collector), icon: 'session' },
+    folders: [row.session_title ?? t('tree.untitledTask')],
     folderIcon: 'session',
   };
 }
@@ -484,12 +490,12 @@ function buildRepoTree(rows) {
 function dateBucket(unix) {
   const now = new Date();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime() / 1000;
-  if (unix >= today) return { key: 'today', label: '오늘' };
-  if (unix >= today - DAY) return { key: 'yesterday', label: '어제' };
-  if (unix >= today - 6 * DAY) return { key: 'week', label: '지난 7일' };
-  if (unix >= today - 29 * DAY) return { key: 'month', label: '지난 30일' };
+  if (unix >= today) return { key: 'today', label: t('date.today') };
+  if (unix >= today - DAY) return { key: 'yesterday', label: t('date.yesterday') };
+  if (unix >= today - 6 * DAY) return { key: 'week', label: t('date.week') };
+  if (unix >= today - 29 * DAY) return { key: 'month', label: t('date.month') };
   const date = new Date(unix * 1000);
-  return { key: `${date.getFullYear()}-${date.getMonth() + 1}`, label: `${date.getFullYear()}년 ${date.getMonth() + 1}월` };
+  return { key: `${date.getFullYear()}-${date.getMonth() + 1}`, label: date.toLocaleDateString(locale(), { year: 'numeric', month: 'long' }) };
 }
 
 /**
@@ -501,14 +507,14 @@ function firstLevel(row) {
     case 'provider':
       return row.providers.length
         ? row.providers.map((p) => ({ key: p, label: PROVIDER_LABEL[p] ?? p, dot: p }))
-        : [{ key: 'unknown', label: '에이전트 모름', icon: 'session' }];
+        : [{ key: 'unknown', label: t('agent.unknown'), icon: 'session' }];
     case 'collector':
       return (row.collectors?.length ? row.collectors : [row.collector]).map((c) =>
-        ({ key: c, label: COLLECTOR_LABEL[c] ?? c, dot: PROVIDER_OF_COLLECTOR[c] ?? c }));
+        ({ key: c, label: collectorLabel(c), dot: PROVIDER_OF_COLLECTOR[c] ?? c }));
     case 'date':
       return [{ ...dateBucket(touchedAt(row)), icon: 'date' }];
     default:
-      return [{ key: row.kind ?? 'unknown', label: state.facets?.kinds.find((k) => k.value === row.kind)?.label ?? row.kind ?? '미분류', icon: KIND_ICON[row.kind] ?? 'doc' }];
+      return [{ key: row.kind ?? 'unknown', label: kindLabel(row.kind), icon: KIND_ICON[row.kind] ?? 'doc' }];
   }
 }
 
@@ -516,8 +522,8 @@ function firstLevel(row) {
 function placeOf(row) {
   const where = row.location;
   if (where?.repo) return { key: `repo:${where.repo}`, label: where.repo, icon: 'repo' };
-  if (where) return { key: 'elsewhere', label: '저장소 밖', icon: 'folder' };
-  return { key: `task:${row.collector}:${row.session_title ?? ''}`, label: row.session_title ?? '제목 없는 작업', icon: 'session' };
+  if (where) return { key: 'elsewhere', label: t('tree.elsewhere'), icon: 'folder' };
+  return { key: `task:${row.collector}:${row.session_title ?? ''}`, label: row.session_title ?? t('tree.untitledTask'), icon: 'session' };
 }
 
 function buildPivotTree(rows) {
@@ -545,7 +551,7 @@ function dirLeaf(row) {
   return { prefix: `${trimmed.split('/').pop()}/`, path: dir };
 }
 
-const byLatest = (a, b) => b.latest - a.latest || a.label.localeCompare(b.label, 'ko');
+const byLatest = (a, b) => b.latest - a.latest || a.label.localeCompare(b.label, locale());
 // 최종본을 먼저, 그다음 최근 순. 라이브러리 목록이 쓰던 순서와 같다.
 // 트리의 시각은 에이전트가 마지막으로 손댄 때다. 기간·날짜 묶기와 같은 시각이라 순서가 어긋나지
 // 않는다. 기록이 없는 가져온 파일만 파일 수정 시각을 쓴다.
@@ -608,8 +614,8 @@ function renderTree({ keepScroll = false } = {}) {
 
   if (state.rows.length === 0) {
     list.append(el('li', { className: 'empty' },
-      el('p', {}, isSearching() ? '맞는 산출물이 없습니다.' : '아직 수집된 산출물이 없습니다.'),
-      isSearching() && el('button', { type: 'button', onclick: resetLibrary }, '검색어와 필터 지우기')));
+      el('p', {}, t(isSearching() ? 'tree.noMatch' : 'tree.empty')),
+      isSearching() && el('button', { type: 'button', onclick: resetLibrary }, t('tree.clear'))));
     return;
   }
   for (const root of state.tree) appendFolder(list, root, 0);
@@ -665,9 +671,9 @@ function appendFile(list, row, level, leaf = null) {
         ...badges(row, { compact: true })),
       row.subtitle && el('div', {
         className: 'file-what',
-        title: `${SUBTITLE_SOURCE_LABEL[row.subtitle_source] ?? ''}: ${row.subtitle}`,
+        title: `${subtitleSource(row.subtitle_source)}: ${row.subtitle}`,
       }, row.subtitle)),
-    el('span', { className: 'file-when', title: `에이전트가 손댄 때 ${fmtDate(touchedAt(row))}` }, shortWhen(touchedAt(row))));
+    el('span', { className: 'file-when', title: t('tree.touchedAt', { date: fmtDate(touchedAt(row)) }) }, shortWhen(touchedAt(row))));
   entry.item.style.setProperty('--level', level);
   addRowNode(row.id, entry.item);
   state.visible.push(entry);
@@ -756,11 +762,12 @@ $('rows').addEventListener('keydown', (event) => {
 // ── 목록 갱신 ───────────────────────────────────────────────────────────
 
 function updateSummary() {
-  const total = state.total.toLocaleString('ko-KR');
-  $('summary').textContent = state.rows.length < state.total ? `${total}개 중 ${state.rows.length}개` : `${total}개`;
+  $('summary').textContent = state.rows.length < state.total
+    ? t('summary.partial', { n: state.rows.length, total: state.total })
+    : t('summary.count', { n: state.total });
   const trimmed = state.q.trim();
   const shortToken = trimmed.split(/\s+/).some((t) => t && t.length < 3);
-  $('hint').textContent = trimmed === '' ? '' : shortToken ? '부분 일치' : '전문 검색';
+  $('hint').textContent = trimmed === '' ? '' : t(shortToken ? 'hint.like' : 'hint.fts');
 }
 
 /**
@@ -892,7 +899,8 @@ function markdownFrame(source, title) {
   frame.setAttribute('sandbox', '');
   // 격리된 문서라 부모의 data-theme 을 못 본다. 그릴 때의 테마를 박아 넣는다.
   const theme = document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light';
-  frame.srcdoc = `<!doctype html><html lang="ko" data-theme="${theme}"><head><meta charset="utf-8">`
+  const lang = globalThis.i18n.lang() === 'ko' ? 'ko' : 'en';
+  frame.srcdoc = `<!doctype html><html lang="${lang}" data-theme="${theme}"><head><meta charset="utf-8">`
     + `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:">`
     + `<style>${FRAME_STYLE}</style></head><body>${html}</body></html>`;
   return frame;
@@ -902,14 +910,14 @@ function previewFor(detail) {
   const src = `/artifact/${detail.id}/raw`;
   if (detail.missing_at) {
     return el('div', { className: 'preview-note' },
-      el('p', {}, '원본 파일이 사라졌습니다.'),
-      el('p', { className: 'hint' }, '기록, 태그, 메모는 그대로 남아 있습니다.'));
+      el('p', {}, t('preview.missing')),
+      el('p', { className: 'hint' }, t('preview.missingNote')));
   }
   if (detail.bundle_files) {
-    return el('pre', { className: 'preview-text' }, (detail.members ?? []).join('\n') || `${detail.bundle_files}개 파일`);
+    return el('pre', { className: 'preview-text' }, (detail.members ?? []).join('\n') || t('preview.bundleFiles', { n: detail.bundle_files }));
   }
   if (TEXT_KINDS.has(detail.kind)) {
-    return el('div', { className: 'preview-fill', id: 'text-preview' }, el('p', { className: 'preview-note hint' }, '불러오는 중…'));
+    return el('div', { className: 'preview-fill', id: 'text-preview' }, el('p', { className: 'preview-note hint' }, t('preview.loading')));
   }
   switch (detail.kind) {
     case 'image':
@@ -924,8 +932,8 @@ function previewFor(detail) {
     }
     default:
       return el('div', { className: 'preview-note' },
-        el('p', {}, '이 형식은 미리보기를 지원하지 않습니다.'),
-        el('button', { type: 'button', onclick: () => post(`/api/artifact/${detail.id}/reveal`, {}) }, 'Finder에서 보기'));
+        el('p', {}, t('preview.unsupported')),
+        el('button', { type: 'button', onclick: () => post(`/api/artifact/${detail.id}/reveal`, {}) }, t('action.reveal')));
   }
 }
 
@@ -935,16 +943,16 @@ function originTimeline(detail) {
   const shown = state.showAllOrigins ? all : all.slice(0, ORIGIN_PREVIEW_COUNT);
   const hidden = all.length - shown.length;
   return el('section', {},
-    el('h3', {}, `출처 · 세션 ${all.length}개`),
+    el('h3', {}, t('origins.title', { n: all.length })),
     el('ol', { className: 'origins' },
       ...shown.map((origin) =>
         el('li', {},
           el('div', { className: 'origin-head' },
             el('span', { className: 'chip static', attrs: { 'data-provider': origin.provider ?? 'none' } },
-              PROVIDER_LABEL[origin.provider] ?? COLLECTOR_LABEL[origin.collector] ?? origin.collector),
+              PROVIDER_LABEL[origin.provider] ?? collectorLabel(origin.collector)),
             el('span', { className: 'when' }, fmtDate(origin.occurred_at)),
-            origin.is_deliverable === 1 && el('span', { className: 'badge final' }, '산출물')),
-          el('div', { className: 'origin-title' }, origin.session_title ?? '(제목 없음)'),
+            origin.is_deliverable === 1 && el('span', { className: 'badge final' }, t('origins.deliverable'))),
+          el('div', { className: 'origin-title' }, origin.session_title ?? t('untitled')),
           origin.workspace && el('div', { className: 'mono dim' }, origin.workspace)))),
     hidden > 0 && el('button', {
       type: 'button',
@@ -953,7 +961,7 @@ function originTimeline(detail) {
         state.showAllOrigins = true;
         render(detail);
       },
-    }, `${hidden}개 더 보기`));
+    }, t('origins.more', { n: hidden })));
 }
 
 function inspector(detail) {
@@ -963,51 +971,51 @@ function inspector(detail) {
       el('span', { className: 'tag' }, name,
         el('button', {
           type: 'button',
-          title: `${name} 태그 떼기`,
+          title: t('tag.remove', { name }),
           onclick: async () => refreshKeepingSelection(await post(`/api/artifact/${detail.id}/untag`, { name })),
         }, '×'))),
     el('button', {
       type: 'button',
       className: 'link',
       onclick: async () => {
-        const name = prompt('태그 이름');
+        const name = prompt(t('tag.prompt'));
         if (name?.trim()) refreshKeepingSelection(await post(`/api/artifact/${detail.id}/tag`, { name: name.trim() }));
       },
-    }, '+ 태그 달기'));
+    }, t('tag.add')));
 
-  return el('aside', { className: 'inspector', attrs: { 'aria-label': '정보' } }, ...keep([
-    el('section', {}, el('h3', {}, '원 작업'),
+  return el('aside', { className: 'inspector', attrs: { 'aria-label': t('inspector.aria') } }, ...keep([
+    el('section', {}, el('h3', {}, t('inspector.origin')),
       el('dl', { className: 'kv' },
-        el('dt', {}, '에이전트'), el('dd', {}, detail.providers.map((p) => PROVIDER_LABEL[p] ?? p).join(', ') || (COLLECTOR_LABEL[detail.collector] ?? '—')),
-        el('dt', {}, '작업'), el('dd', {}, detail.session_title ?? '—'),
-        el('dt', {}, '작업공간'), el('dd', { className: 'mono' }, detail.workspace ?? '—'),
-        el('dt', {}, '만든 때'), el('dd', {}, fmtDate(detail.created_at ?? detail.mtime)),
-        el('dt', {}, '바뀐 때'), el('dd', {}, fmtDate(detail.mtime)),
-        el('dt', {}, '크기'), el('dd', {}, fmtBytes(detail.size_bytes)),
-        el('dt', {}, '검색'), el('dd', {}, BODY_STATE_LABEL[detail.body_state] ?? '색인 없음'))),
+        el('dt', {}, t('kv.agent')), el('dd', {}, detail.providers.map((p) => PROVIDER_LABEL[p] ?? p).join(', ') || (detail.collector ? collectorLabel(detail.collector) : '—')),
+        el('dt', {}, t('kv.task')), el('dd', {}, detail.session_title ?? '—'),
+        el('dt', {}, t('kv.workspace')), el('dd', { className: 'mono' }, detail.workspace ?? '—'),
+        el('dt', {}, t('kv.created')), el('dd', {}, fmtDate(detail.created_at ?? detail.mtime)),
+        el('dt', {}, t('kv.modified')), el('dd', {}, fmtDate(detail.mtime)),
+        el('dt', {}, t('kv.size')), el('dd', {}, fmtBytes(detail.size_bytes)),
+        el('dt', {}, t('kv.search')), el('dd', {}, tOr(`bodyState.${detail.body_state}`, t('bodyState.none'))))),
 
-    el('section', {}, el('h3', {}, '원본'),
+    el('section', {}, el('h3', {}, t('inspector.source')),
       el('p', { className: 'mono path' }, detail.abs_path),
       el('div', { className: 'link-row' },
-        action('경로 복사', () => navigator.clipboard.writeText(detail.abs_path)),
-        detail.session_dir && action('세션 폴더 열기', () => post(`/api/artifact/${detail.id}/reveal`, { session: true })),
-        detail.session_ref && action('세션 id 복사', () => navigator.clipboard.writeText(detail.session_ref)))),
+        action(t('action.copyPath'), () => navigator.clipboard.writeText(detail.abs_path)),
+        detail.session_dir && action(t('action.openSession'), () => post(`/api/artifact/${detail.id}/reveal`, { session: true })),
+        detail.session_ref && action(t('action.copySession'), () => navigator.clipboard.writeText(detail.session_ref)))),
 
-    detail.prompt && el('section', {}, el('h3', {}, '원본 요청'), el('pre', { className: 'prompt' }, detail.prompt)),
+    detail.prompt && el('section', {}, el('h3', {}, t('inspector.prompt')), el('pre', { className: 'prompt' }, detail.prompt)),
 
     (detail.origins?.length ?? 0) > 1 && originTimeline(detail),
 
-    el('section', {}, el('h3', {}, '태그'), tags),
+    el('section', {}, el('h3', {}, t('inspector.tags')), tags),
 
-    el('section', {}, el('h3', {}, '메모'),
+    el('section', {}, el('h3', {}, t('inspector.note')),
       el('textarea', {
         className: 'note',
         value: detail.note ?? '',
-        placeholder: '이 산출물에 대해 남길 말',
+        placeholder: t('note.placeholder'),
         onchange: (event) => post(`/api/artifact/${detail.id}/note`, { note: event.target.value }),
       })),
 
-    detail.duplicates.length > 0 && el('section', {}, el('h3', {}, `같은 내용 ${detail.duplicates.length}개`),
+    detail.duplicates.length > 0 && el('section', {}, el('h3', {}, t('inspector.duplicates', { n: detail.duplicates.length })),
       el('ul', { className: 'duplicates' }, ...detail.duplicates.map((d) =>
         el('li', {},
           el('button', { type: 'button', className: 'link', onclick: () => select(d.id, { reveal: true }) }, d.file_name),
@@ -1027,32 +1035,32 @@ function render(detail) {
     el('div', { className: 'doc-title' },
       el('h2', {}, detail.file_name),
       ...badges(detail),
-      detail.stale_final && el('span', { className: 'badge stale' }, '최종본 표시 뒤 바뀜')),
+      detail.stale_final && el('span', { className: 'badge stale' }, t('badge.staleFinal'))),
     detail.subtitle && el('p', {
       className: 'doc-what',
-      title: SUBTITLE_SOURCE_LABEL[detail.subtitle_source] ?? '',
+      title: subtitleSource(detail.subtitle_source),
     }, detail.subtitle),
     el('div', { className: 'doc-meta' },
       ...providerChips(detail.providers),
       el('span', { className: 'where' }, ...locationNodes(detail)),
-      el('span', { className: 'when', title: fmtDate(made) }, `만든 때 ${relativeWhen(made)}`)),
+      el('span', { className: 'when', title: fmtDate(made) }, t('detail.created', { when: relativeWhen(made) }))),
     el('div', { className: 'doc-actions' },
-      toggle(isFinal ? '최종본 해제' : '최종본으로 표시', isFinal, async () =>
+      toggle(t(isFinal ? 'action.unmarkFinal' : 'action.markFinal'), isFinal, async () =>
         refreshKeepingSelection(await post(`/api/artifact/${detail.id}/state`, { state: isFinal ? 'discovered' : 'final' }))),
-      toggle(detail.favorite ? '★ 즐겨찾기 해제' : '☆ 즐겨찾기', Boolean(detail.favorite), async () =>
+      toggle(t(detail.favorite ? 'action.unfavorite' : 'action.favorite'), Boolean(detail.favorite), async () =>
         refreshKeepingSelection(await post(`/api/artifact/${detail.id}/favorite`, { on: !detail.favorite }))),
-      el('button', { type: 'button', onclick: () => post(`/api/artifact/${detail.id}/reveal`, {}) }, 'Finder에서 보기'),
-      detail.kind === 'text' && MARKDOWN_EXT.has(detail.ext) && toggle('원문 보기', state.rawMode, () => {
+      el('button', { type: 'button', onclick: () => post(`/api/artifact/${detail.id}/reveal`, {}) }, t('action.reveal')),
+      detail.kind === 'text' && MARKDOWN_EXT.has(detail.ext) && toggle(t('action.raw'), state.rawMode, () => {
         state.rawMode = !state.rawMode;
         render(detail);
       }),
-      detail.kind === 'markup' && toggle(detail.allow_scripts ? '스크립트 차단' : '스크립트 허용', Boolean(detail.allow_scripts), async () =>
+      detail.kind === 'markup' && toggle(t(detail.allow_scripts ? 'action.blockScripts' : 'action.allowScripts'), Boolean(detail.allow_scripts), async () =>
         render(await post(`/api/artifact/${detail.id}/allow-scripts`, { on: !detail.allow_scripts }))),
       el('button', {
         type: 'button',
         className: 'icon-button push',
-        title: inspectorOpen ? '정보 패널 닫기' : '정보 패널 열기',
-        attrs: { 'aria-pressed': String(inspectorOpen), 'aria-label': '정보 패널' },
+        title: t(inspectorOpen ? 'panel.close' : 'panel.open'),
+        attrs: { 'aria-pressed': String(inspectorOpen), 'aria-label': t('panel.aria') },
         onclick: () => {
           inspectorOpen = !inspectorOpen;
           prefs.write('inspector.open', inspectorOpen);
@@ -1078,7 +1086,7 @@ function render(detail) {
       })
       .catch(() => {
         const box = document.getElementById('text-preview');
-        if (box) box.replaceChildren(el('p', { className: 'preview-note danger' }, '불러오지 못했습니다.'));
+        if (box) box.replaceChildren(el('p', { className: 'preview-note danger' }, t('preview.loadFailed')));
       });
   }
 }
@@ -1091,7 +1099,7 @@ const kbd = (key) => el('kbd', {}, key);
 const DIST_ROWS = 8;
 // 색은 개체를 따른다. 필터로 에이전트가 줄어도 남은 에이전트의 색과 쌓는 순서가 그대로다.
 const AGENT_ORDER = ['openai-codex', 'claude-code', 'ai-mesh', 'unknown'];
-const agentName = (provider) => (provider === 'unknown' ? '에이전트 모름' : PROVIDER_LABEL[provider] ?? provider);
+const agentName = (provider) => (provider === 'unknown' ? t('agent.unknown') : PROVIDER_LABEL[provider] ?? provider);
 const TOOLTIP_OFFSET = 8;
 const CHART = { plot: 160, top: 10, axis: 22, left: 34, right: 6, maxBar: 18, gap: 2, radius: 4, tickCount: 4 };
 let homeToken = 0;
@@ -1144,23 +1152,22 @@ function dashboard(activity) {
   const finals = state.rows.filter((r) => r.state === 'final');
   const recent = state.rows.filter((r) => r.state !== 'final').sort((a, b) => b.mtime - a.mtime);
   const repos = new Set(state.rows.map((r) => r.location?.repo).filter(Boolean));
-  const total = state.total.toLocaleString('ko-KR');
 
   return el('div', { className: 'dash' },
     el('header', { className: 'dash-head' },
       // 기간은 필터가 아니라 보는 창이다. 제목은 그대로 두고 부제에 기간을 적는다.
-      el('h2', {}, state.q.trim() ? '검색 결과 개요' : Object.keys(state.filters).length ? '필터 결과 개요' : '라이브러리 개요'),
+      el('h2', {}, t(state.q.trim() ? 'home.search' : Object.keys(state.filters).length ? 'home.filter' : 'home.library')),
       el('p', { className: 'dash-sub' },
-        [state.period !== 'all' && PERIOD_TITLE[state.period], `${total}개`, `최종본 ${finals.length}개`, `저장소 ${repos.size}곳`].filter(Boolean).join(' · '))),
-    activity ? activityPanel(activity) : el('p', { className: 'hint' }, '활동 기록을 불러오지 못했습니다.'),
+        [state.period !== 'all' && t(`periodTitle.${state.period}`), t('home.count', { n: state.total }), t('home.finals', { n: finals.length }), t('home.repos', { n: repos.size })].filter(Boolean).join(' · '))),
+    activity ? activityPanel(activity) : el('p', { className: 'hint' }, t('home.activityFailed')),
     distributions(),
     el('div', { className: 'dash-grid' },
-      homeList('최종본', finals.slice(0, HOME_LIST_COUNT), '최종본으로 표시한 산출물이 아직 없습니다.'),
-      homeList('최근 바뀐 것', recent.slice(0, HOME_LIST_COUNT), '최근 바뀐 산출물이 없습니다.')),
+      homeList(t('home.finalsTitle'), finals.slice(0, HOME_LIST_COUNT), t('home.finalsEmpty')),
+      homeList(t('home.recentTitle'), recent.slice(0, HOME_LIST_COUNT), t('home.recentEmpty'))),
     el('p', { className: 'keys' },
-      el('span', {}, kbd('↑'), kbd('↓'), ' 이동'),
-      el('span', {}, kbd('←'), kbd('→'), ' 접기 · 펼치기'),
-      el('span', {}, kbd('/'), ' 검색')));
+      el('span', {}, kbd('↑'), kbd('↓'), ` ${t('keys.move')}`),
+      el('span', {}, kbd('←'), kbd('→'), ` ${t('keys.fold')}`),
+      el('span', {}, kbd('/'), ` ${t('keys.search')}`)));
 }
 
 // ── 개요: 활동 그래프 ───────────────────────────────────────────────────
@@ -1174,9 +1181,9 @@ const bucketDate = (bucket) => new Date(bucket.start * 1000);
 /** 툴팁과 표에 쓰는 칸 이름. 주는 그 주의 월요일로 부른다. */
 function bucketLabel(bucket, unit) {
   const date = bucketDate(bucket);
-  const day = date.toLocaleDateString('ko-KR', { month: 'long', day: 'numeric', weekday: unit === 'day' ? 'short' : undefined });
-  if (unit === 'hour') return `${day} ${date.getHours()}시`;
-  return unit === 'week' ? `${day} 주` : day;
+  const day = date.toLocaleDateString(locale(), { month: 'long', day: 'numeric', weekday: unit === 'day' ? 'short' : undefined });
+  if (unit === 'hour') return t('chart.hour', { day, hour: date.getHours() });
+  return unit === 'week' ? t('chart.week', { day }) : day;
 }
 
 /**
@@ -1185,13 +1192,13 @@ function bucketLabel(bucket, unit) {
  */
 function axisLabel(bucket, unit, fromEnd, count) {
   const date = bucketDate(bucket);
-  if (unit === 'hour') return date.getHours() % 6 === 0 ? `${date.getHours()}시` : null;
+  if (unit === 'hour') return date.getHours() % 6 === 0 ? t('chart.axisHour', { hour: date.getHours() }) : null;
   const every = unit === 'day'
     ? (count <= 7 ? 1 : count <= 31 ? 7 : 14)
     : (count <= 12 ? 2 : count <= 26 ? 4 : 8);
   if (fromEnd % every !== 0) return null;
-  if (unit === 'day' && fromEnd === 0) return '오늘';
-  return `${date.getMonth() + 1}/${date.getDate()}`;
+  if (unit === 'day' && fromEnd === 0) return t('chart.today');
+  return date.toLocaleDateString(locale(), { month: 'numeric', day: 'numeric' });
 }
 
 /** 1·2·5 계단으로 반올림한 눈금 간격. 정수만 센다. */
@@ -1206,14 +1213,14 @@ function activityPanel(activity) {
   const agents = orderedAgents(activity.providers);
   const totals = Object.fromEntries(agents.map((p) => [p, activity.buckets.reduce((sum, b) => sum + (b.counts[p] ?? 0), 0)]));
   const sum = Object.values(totals).reduce((a, b) => a + b, 0);
-  const title = `${PERIOD_TITLE[activity.period]} · 에이전트가 쓴 산출물`;
+  const title = t('chart.title', { period: t(`periodTitle.${activity.period}`) });
   const head = el('div', { className: 'panel-head' },
     el('h3', {}, title),
     agents.length > 1 && el('ul', { className: 'legend' }, ...agents.map((p) =>
       el('li', {}, el('span', { className: 'swatch', attrs: { 'data-provider': p } }), agentName(p),
-        el('span', { className: 'legend-n' }, totals[p].toLocaleString('ko-KR'))))));
+        el('span', { className: 'legend-n' }, totals[p].toLocaleString(locale()))))));
   if (sum === 0) {
-    return el('section', { className: 'panel' }, head, el('p', { className: 'hint' }, `${PERIOD_NAME[activity.period]} 에이전트가 쓴 산출물이 없습니다.`));
+    return el('section', { className: 'panel' }, head, el('p', { className: 'hint' }, t('chart.empty', { period: t(`periodName.${activity.period}`) })));
   }
 
   const chart = el('div', { className: 'chart' });
@@ -1230,9 +1237,9 @@ function activityPanel(activity) {
   // 툴팁은 보조다. 같은 숫자를 표로도 읽을 수 있어야 한다.
   const stackOf = (b) => agents.reduce((s, p) => s + (b.counts[p] ?? 0), 0);
   const table = el('details', { className: 'table-view' },
-    el('summary', {}, '표로 보기'),
+    el('summary', {}, t('chart.table')),
     el('table', {},
-      el('thead', {}, el('tr', {}, el('th', {}, UNIT_HEADER[activity.unit]), ...agents.map((p) => el('th', {}, agentName(p))), el('th', {}, '합계'))),
+      el('thead', {}, el('tr', {}, el('th', {}, t(`unit.${activity.unit}`)), ...agents.map((p) => el('th', {}, agentName(p))), el('th', {}, t('chart.total')))),
       el('tbody', {}, ...[...activity.buckets].reverse().filter((b) => stackOf(b) > 0).map((b) =>
         el('tr', {}, el('th', {}, bucketLabel(b, activity.unit)),
           ...agents.map((p) => el('td', {}, b.counts[p] ?? 0)),
@@ -1273,13 +1280,13 @@ function drawActivity(chart, activity, agents, title) {
     height: top + plot + axis,
     tabindex: 0,
     role: 'group',
-    'aria-label': `${title}. 좌우 화살표로 칸을 옮깁니다`,
+    'aria-label': t('chart.aria', { title }),
   });
   for (let value = 0; value <= max; value += step) {
     const y = Math.round(yOf(value)) + 0.5;
     svg.append(svgEl('line', { class: value === 0 ? 'baseline' : 'grid', x1: left, x2: width - right, y1: y, y2: y }));
     const label = svgEl('text', { class: 'axis', x: left - 8, y: y + 3, 'text-anchor': 'end' });
-    label.textContent = value.toLocaleString('ko-KR');
+    label.textContent = value.toLocaleString(locale());
     svg.append(label);
   }
   const band = svgEl('rect', { class: 'hover-band', x: 0, y: top, width: slot, height: plot, rx: 4, visibility: 'hidden' });
@@ -1322,12 +1329,12 @@ function drawActivity(chart, activity, agents, title) {
       el('div', { className: 'tip-date' }, bucketLabel(b, unit)),
       ...agents.map((p) => el('div', { className: 'tip-row' },
         el('span', { className: 'tip-key', attrs: { 'data-provider': p } }),
-        el('span', { className: 'tip-v' }, (b.counts[p] ?? 0).toLocaleString('ko-KR')),
+        el('span', { className: 'tip-v' }, (b.counts[p] ?? 0).toLocaleString(locale())),
         el('span', { className: 'tip-name' }, agentName(p)))),
       agents.length > 1 && el('div', { className: 'tip-row tip-total' },
         el('span', {}),
-        el('span', { className: 'tip-v' }, stackOf(b).toLocaleString('ko-KR')),
-        el('span', { className: 'tip-name' }, '합계')));
+        el('span', { className: 'tip-v' }, stackOf(b).toLocaleString(locale())),
+        el('span', { className: 'tip-name' }, t('chart.total'))));
     tooltip.hidden = false;
     // 막대 옆에 띄운다. 위에 띄우면 제목과 범례를 덮는다.
     const tipWidth = tooltip.offsetWidth;
@@ -1378,15 +1385,15 @@ function distribution(title, rows, { key, agentColor = false, note = null }) {
           el('li', {}, el('button', {
             type: 'button',
             className: 'dist-row',
-            title: row.title ?? `${row.label}만 보기`,
+            title: row.title ?? t('dist.only', { label: row.label }),
             attrs: { 'aria-pressed': String(state.filters[key] === row.value) },
             onclick: () => toggleFilter(key, row.value),
           },
             el('span', { className: 'dist-label' }, row.label),
             el('span', { className: 'dist-track' },
               el('span', { className: 'dist-bar', attrs: { style: `width: ${(row.n / max) * 100}%`, 'data-provider': agentColor ? row.value : null } })),
-            el('span', { className: 'dist-n' }, row.n.toLocaleString('ko-KR'))))))
-      : el('p', { className: 'hint' }, '없음'),
+            el('span', { className: 'dist-n' }, row.n.toLocaleString(locale()))))))
+      : el('p', { className: 'hint' }, t('dist.none')),
     note);
 }
 
@@ -1398,7 +1405,7 @@ function distributions() {
   const outside = state.filters.kind ? 0 : facets.kinds.filter((k) => hidden.has(k.value)).reduce((s, k) => s + k.n, 0);
 
   return el('div', { className: 'dash-grid dists' },
-    distribution('종류', kinds.slice(0, DIST_ROWS).map((k) => ({ value: k.value, label: k.label, n: k.n })), {
+    distribution(t('dist.kind'), kinds.slice(0, DIST_ROWS).map((k) => ({ value: k.value, label: kindLabel(k.value), n: k.n })), {
       key: 'kind',
       note: outside > 0 && el('button', {
         type: 'button',
@@ -1408,15 +1415,15 @@ function distributions() {
           facetOpen.kind = true;
           renderFilters(state.facets);
         },
-      }, `라이브러리 밖 ${outside.toLocaleString('ko-KR')}개 (코드 · 기타)`),
+      }, t('dist.outside', { n: outside })),
     }),
-    distribution('에이전트', orderedAgents(facets.providers.map((p) => p.value))
+    distribution(t('dist.agent'), orderedAgents(facets.providers.map((p) => p.value))
       .map((value) => ({ value, label: agentName(value), n: facets.providers.find((p) => p.value === value).n })), {
       key: 'provider',
       agentColor: true,
     }),
-    distribution('작업공간', facets.workspaces.slice(0, DIST_ROWS).map((w) =>
-      ({ value: w.value, label: w.value.split('/').pop(), title: `${w.value} 에서 에이전트가 만든 것만 보기`, n: w.n })), {
+    distribution(t('dist.workspace'), facets.workspaces.slice(0, DIST_ROWS).map((w) =>
+      ({ value: w.value, label: w.value.split('/').pop(), title: t('dist.workspaceTitle', { path: w.value }), n: w.n })), {
       key: 'workspace',
     }));
 }
@@ -1453,14 +1460,6 @@ async function applyRoute() {
 
 window.addEventListener('popstate', () => void applyRoute());
 
-const REASON_LABEL = {
-  'too-deep': '중첩 폴더 (스캐폴딩된 프로젝트)',
-  dotfile: '점으로 시작하는 파일 (.git 등)',
-  'excluded-dir': '제외 폴더 (tmp · attachments)',
-  'not-artifacts-dir': '산출물 폴더 밖 (transcript 등)',
-  'unsafe-path': '안전하지 않은 경로',
-  symlink: '심볼릭 링크',
-};
 
 async function showCoverage({ fromRoute = false } = {}) {
   if (!fromRoute) setRoute('#/coverage');
@@ -1472,20 +1471,20 @@ async function showCoverage({ fromRoute = false } = {}) {
     el('section', {},
       el('p', { className: 'mono' }, source.sessionsRoot),
       el('dl', { className: 'kv' },
-        el('dt', {}, '세션'), el('dd', {}, `${source.sessions.total}개 (산출물 있음 ${source.sessions.withArtifacts}, 비어 있음 ${source.sessions.empty})`),
-        el('dt', {}, '수집'), el('dd', {}, `${source.collected}개`),
-        el('dt', {}, '제외'), el('dd', {}, `${source.excludedTotal}개`)),
-      el('h3', {}, '제외 이유'),
+        el('dt', {}, t('coverage.sessions')), el('dd', {}, t('coverage.sessionCounts', { total: source.sessions.total, withArtifacts: source.sessions.withArtifacts, empty: source.sessions.empty })),
+        el('dt', {}, t('coverage.collected')), el('dd', {}, t('coverage.count', { n: source.collected })),
+        el('dt', {}, t('coverage.excluded')), el('dd', {}, t('coverage.count', { n: source.excludedTotal }))),
+      el('h3', {}, t('coverage.reasons')),
       el('ul', {}, ...Object.entries(source.excluded)
         .sort((a, b) => b[1] - a[1])
-        .map(([reason, n]) => el('li', {}, `${n}개: ${REASON_LABEL[reason] ?? reason}`))),
-      source.largestGroups.length > 0 && el('h3', {}, '제외된 가장 큰 묶음'),
+        .map(([reason, n]) => el('li', {}, t('coverage.reasonLine', { n, reason: tOr(`reason.${reason}`, reason) })))),
+      source.largestGroups.length > 0 && el('h3', {}, t('coverage.largest')),
       source.largestGroups.length > 0 && el('ul', {},
-        ...source.largestGroups.map((g) => el('li', {}, el('span', { className: 'mono' }, g.name), `: ${g.files}개`))),
+        ...source.largestGroups.map((g) => el('li', {}, el('span', { className: 'mono' }, g.name), t('coverage.groupLine', { n: g.files })))),
       el('p', { className: 'hint' },
-        '에이전트가 산출물 폴더 안에 프로젝트를 통째로 만들면 그 파일들은 제외됩니다. 산출물 폴더 바로 아래 파일만 수집합니다.')),
+        t('coverage.note'))),
   );
-  $('detail').replaceChildren(el('div', { className: 'page' }, el('h2', {}, '수집 범위'), ...sections.flat().filter(Boolean)));
+  $('detail').replaceChildren(el('div', { className: 'page' }, el('h2', {}, t('coverage.title')), ...sections.flat().filter(Boolean)));
 }
 
 // ── 활동 보기 ────────────────────────────────────────────────────────────
@@ -1509,14 +1508,14 @@ function sessionCard(session) {
   return el('li', { className: 'session' },
     el('div', { className: 'session-head' },
       el('span', { className: 'when' }, relativeWhen(session.at)),
-      el('span', { className: 'chip static', attrs: { 'data-provider': PROVIDER_OF_COLLECTOR[session.collector] ?? session.collector } }, COLLECTOR_LABEL[session.collector] ?? session.collector),
+      el('span', { className: 'chip static', attrs: { 'data-provider': PROVIDER_OF_COLLECTOR[session.collector] ?? session.collector } }, collectorLabel(session.collector)),
       session.workspace && el('span', { className: 'where-dir' }, session.workspace.split('/').slice(-2).join('/')),
-      session.final_count > 0 && el('span', { className: 'badge final' }, `최종본 ${session.final_count}`),
+      session.final_count > 0 && el('span', { className: 'badge final' }, t('session.final', { n: session.final_count })),
       // 대화 하나가 띄운 서브에이전트 중 파일을 만든 스레드 수. 큰 작업인지 한눈에 보인다.
-      session.subagent_count > 0 && el('span', { className: 'badge multi' }, `서브에이전트 ${session.subagent_count}`)),
-    el('div', { className: 'session-title' }, session.session_title ?? '(제목 없음)'),
+      session.subagent_count > 0 && el('span', { className: 'badge multi' }, t('session.subagents', { n: session.subagent_count }))),
+    el('div', { className: 'session-title' }, session.session_title ?? t('untitled')),
     el('div', { className: 'session-files' }, ...files,
-      hidden > 0 && el('span', { className: 'session-more' }, `외 ${hidden}개`)),
+      hidden > 0 && el('span', { className: 'session-more' }, t('session.more', { n: hidden }))),
   );
 }
 
@@ -1534,10 +1533,10 @@ async function refreshActivity() {
   $('collapse-all').hidden = true;
   $('group-by').parentElement.hidden = true;
 
-  if (sessions.length === 0) list.append(el('li', { className: 'empty' }, el('p', {}, '최근 활동이 없습니다.')));
+  if (sessions.length === 0) list.append(el('li', { className: 'empty' }, el('p', {}, t('activity.empty'))));
   for (const session of sessions) list.append(sessionCard(session));
 
-  $('summary').textContent = `최근 작업 ${sessions.length}건`;
+  $('summary').textContent = t('activity.summary', { n: sessions.length });
   $('hint').textContent = '';
   await Promise.all([refreshFacets(), refreshOverview()]);
 }
@@ -1588,7 +1587,10 @@ $('q').addEventListener('input', (event) => {
 });
 $('coverage').addEventListener('click', () => void showCoverage());
 $('collapse-all').append(icon('collapse'));
-$('group-by').replaceChildren(...Object.entries(GROUPINGS).map(([value, label]) => el('option', { value, selected: value === groupBy }, label)));
+function renderGroupBy() {
+  $('group-by').replaceChildren(...GROUPINGS.map((value) => el('option', { value, selected: value === groupBy }, t(`group.${value}`))));
+}
+renderGroupBy();
 $('group-by').addEventListener('change', (event) => {
   groupBy = event.target.value;
   prefs.write('tree.groupBy', groupBy);
@@ -1629,13 +1631,13 @@ document.addEventListener('keydown', (event) => {
 
 $('sweep').addEventListener('click', async () => {
   $('sweep').disabled = true;
-  $('sweep').textContent = '수집 중…';
+  $('sweep').textContent = t('sweep.running');
   try {
     await post('/api/sweep');
     await refresh({ live: true });
   } finally {
     $('sweep').disabled = false;
-    $('sweep').textContent = '다시 수집';
+    $('sweep').textContent = t('sweep.idle');
   }
 });
 
@@ -1648,8 +1650,8 @@ let lastCollectedAt = null;
 function renderLive(status) {
   $('live').dataset.status = status;
   $('live').textContent = status === 'down'
-    ? '연결 끊김'
-    : lastCollectedAt ? `실시간 · ${relativeWhen(lastCollectedAt)} 수집` : '실시간';
+    ? t('live.down')
+    : lastCollectedAt ? t('live.collected', { when: relativeWhen(lastCollectedAt) }) : t('live.up');
 }
 
 function connectLive() {
@@ -1678,13 +1680,46 @@ setInterval(() => {
 }, MINUTE * 1000);
 
 $('home').addEventListener('click', () => goHome());
+
+// ── 언어 ───────────────────────────────────────────────────────────────
+// 이름은 각 언어가 자기를 부르는 말이라 번역하지 않는다.
+const LANG_NAME = { ko: '한국어', en: 'English' };
+const LANG_SHORT = { ko: 'KO', en: 'EN' };
+
+function renderLang() {
+  const current = globalThis.i18n.lang();
+  $('lang').replaceChildren(...globalThis.i18n.LANGS.map((code) =>
+    el('button', {
+      type: 'button',
+      lang: code,
+      title: LANG_NAME[code],
+      attrs: { role: 'radio', 'aria-checked': String(code === current), 'aria-label': LANG_NAME[code] },
+      onclick: () => globalThis.i18n.set(code),
+    }, LANG_SHORT[code])));
+}
+
+/**
+ * 언어가 바뀌면 그려 둔 것을 전부 다시 그린다. 정적 문구는 i18n.js 가 이미 바꿨다 — 여기서는
+ * 코드가 만든 문구(트리 묶음 이름, 필터, 개요, 상세)를 새 언어로 다시 만든다.
+ */
+document.addEventListener('langchange', () => {
+  renderLang();
+  renderPeriod();
+  renderGroupBy();
+  renderThemeButton();
+  setModeState(state.mode);
+  if ($('live').dataset.status) renderLive($('live').dataset.status);
+  if (state.view === 'detail' && state.detail) render(state.detail);
+  else if (state.view === 'coverage') void showCoverage({ fromRoute: true });
+  void refresh();
+});
+renderLang();
 renderPeriod();
 
 // ── 테마 ───────────────────────────────────────────────────────────────
 // 시스템 설정 → 라이트 → 다크 순서로 돈다. 정하는 일은 theme.js 가 하고 여기는 버튼만 그린다.
 
 const THEME_ICON = { system: 'auto', light: 'sun', dark: 'moon' };
-const THEME_LABEL = { system: '시스템 설정', light: '라이트', dark: '다크' };
 const nextTheme = () => {
   const { CHOICES } = globalThis.theme;
   return CHOICES[(CHOICES.indexOf(globalThis.theme.choice()) + 1) % CHOICES.length];
@@ -1692,7 +1727,7 @@ const nextTheme = () => {
 
 function renderThemeButton() {
   const choice = globalThis.theme.choice();
-  const label = `테마: ${THEME_LABEL[choice]}. 누르면 ${THEME_LABEL[nextTheme()]}`;
+  const label = t('theme.label', { current: t(`theme.${choice}`), next: t(`theme.${nextTheme()}`) });
   $('theme').replaceChildren(icon(THEME_ICON[choice]));
   $('theme').title = label;
   $('theme').setAttribute('aria-label', label);

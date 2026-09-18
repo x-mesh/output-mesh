@@ -9,64 +9,66 @@
 </head>
 <body>
 <header class="topbar">
-  <h1><button id="home" type="button" class="brand" title="개요로 가기">Output Mesh</button></h1>
-  <div class="modes" role="tablist" aria-label="보기">
-    <button id="mode-library" type="button" role="tab" aria-selected="true">라이브러리</button>
-    <button id="mode-activity" type="button" role="tab" aria-selected="false">활동</button>
+  <h1><button id="home" type="button" class="brand" data-i18n-attr="title:brand.home">Output Mesh</button></h1>
+  <div class="modes" role="tablist" data-i18n-attr="aria-label:aria.modes">
+    <button id="mode-library" type="button" role="tab" aria-selected="true" data-i18n="mode.library">라이브러리</button>
+    <button id="mode-activity" type="button" role="tab" aria-selected="false" data-i18n="mode.activity">활동</button>
   </div>
-  <div id="stats" class="stats" aria-label="현황"></div>
+  <div id="stats" class="stats" data-i18n-attr="aria-label:aria.stats"></div>
   <span id="live" class="live" aria-live="polite"></span>
-  <button id="sweep" type="button" class="quiet">다시 수집</button>
+  <button id="sweep" type="button" class="quiet" data-i18n="sweep.idle">다시 수집</button>
+  <div id="lang" class="lang" role="radiogroup" data-i18n-attr="aria-label:lang.aria"></div>
   <button id="theme" type="button" class="icon-button theme-button"></button>
 </header>
 
 <main id="layout" class="layout">
-  <nav class="explorer" aria-label="탐색기">
+  <nav class="explorer" data-i18n-attr="aria-label:aria.explorer">
     <div class="explorer-search">
-      <input id="q" type="search" placeholder="파일명 · 본문 · 작업 검색" autocomplete="off" spellcheck="false" aria-describedby="hint">
+      <input id="q" type="search" autocomplete="off" spellcheck="false" aria-describedby="hint" data-i18n-attr="placeholder:search.placeholder">
       <span id="hint" class="hint"></span>
     </div>
     <div class="period-row">
-      <span class="period-label" id="period-label">기간</span>
+      <span class="period-label" id="period-label" data-i18n="period.label">기간</span>
       <div id="period" class="period" role="radiogroup" aria-labelledby="period-label"></div>
     </div>
     <details id="filters" class="filters">
       <summary>
-        <span class="filters-label">필터</span>
+        <span class="filters-label" data-i18n="filters.label">필터</span>
         <span id="active-filters" class="active-filters"></span>
       </summary>
       <div id="facets" class="facets"></div>
     </details>
     <div class="explorer-head">
       <span id="summary"></span>
-      <label class="group-by">묶기
-        <select id="group-by" aria-label="트리 묶기 기준"></select>
+      <label class="group-by"><span data-i18n="groupBy.label">묶기</span>
+        <select id="group-by" data-i18n-attr="aria-label:groupBy.aria"></select>
       </label>
-      <button id="collapse-all" type="button" class="icon-button" title="모두 접기" aria-label="모두 접기"></button>
+      <button id="collapse-all" type="button" class="icon-button" data-i18n-attr="title:tree.collapseAll;aria-label:tree.collapseAll"></button>
     </div>
-    <ul id="rows" class="tree" role="tree" aria-label="산출물"></ul>
+    <ul id="rows" class="tree" role="tree" data-i18n-attr="aria-label:aria.tree"></ul>
     <footer class="explorer-foot">
       <span id="out-of-scope"></span>
-      <button id="coverage" type="button" class="link">수집 범위</button>
+      <button id="coverage" type="button" class="link" data-i18n="coverage.link">수집 범위</button>
     </footer>
   </nav>
-  <div id="resizer" class="resizer" role="separator" aria-orientation="vertical" aria-label="탐색기 폭" tabindex="0"></div>
-  <section id="detail" class="content" aria-label="내용"></section>
+  <div id="resizer" class="resizer" role="separator" aria-orientation="vertical" tabindex="0" data-i18n-attr="aria-label:aria.resizer"></div>
+  <section id="detail" class="content" data-i18n-attr="aria-label:aria.content"></section>
 </main>
 
 <dialog id="importer">
   <form method="dialog" class="importer-head">
-    <strong>폴더 가져오기</strong>
-    <button value="close">닫기</button>
+    <strong data-i18n="importer.title">폴더 가져오기</strong>
+    <button value="close" data-i18n="importer.close">닫기</button>
   </form>
   <p id="import-path" class="mono"></p>
   <ul id="import-entries" class="import-entries"></ul>
   <footer class="importer-foot">
-    <button id="import-confirm" type="button">이 폴더 가져오기</button>
+    <button id="import-confirm" type="button" data-i18n="importer.confirm">이 폴더 가져오기</button>
     <span id="import-status"></span>
   </footer>
 </dialog>
 
+<script src="/i18n.js"></script>
 <script src="/vendor/marked.js"></script>
 <script type="module" src="/app.js"></script>
 </body>
