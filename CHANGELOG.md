@@ -8,6 +8,8 @@ lives in `package.json`; `output-mesh --version` and the explorer footer show it
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-09-18
+
 ### Added
 
 - **collect:** read-only collection from Aside session folders (enriched from Aside's `state.db`), Codex rollout logs, Claude Code transcripts, and folders you import. Files stay where they are; the catalog only points at them
