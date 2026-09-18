@@ -16,8 +16,13 @@ lives in `package.json`; `output-mesh --version` and the explorer footer show it
 
 ### Changed
 
+- "Just happened" sits below the activity graph
 - changes found by watching the disk are labeled "seen on disk" instead of "outside an agent", since an agent may have made them through the shell
 - files you import and documents found in repositories no longer count as agent sessions in the activity graph or the 24-hour count
+
+### Fixed
+
+- the server re-read every growing agent log from the start on each collection. While an agent was working, memory grew by about 66 MB every 30 seconds (it reached 3.9 GB). Logs are now read from where the last read stopped. The first run also got faster: 4.2 GB of logs in 4.3 s instead of 7.8 s, with peak memory down from 2.9 GB to 1.1 GB
 
 ## [0.1.0] - 2026-09-18
 
