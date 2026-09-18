@@ -596,6 +596,8 @@ embed.preview-fill { height: 100%; }
 .change-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
 .change-where { display: flex; gap: 4px; min-width: 0; font-size: var(--text-xs); color: var(--text-dim); overflow: hidden; }
 .change-tags { display: flex; gap: var(--space-1); align-items: center; }
+.changes-hidden { margin: var(--space-2) 0 0 var(--space-2); }
+.changes-hidden button.link { font-size: var(--text-xs); }
 .change-outside { font-size: var(--text-xs); color: var(--text-dim); font-style: italic; white-space: nowrap; }
 .home-list ul { list-style: none; margin: 0; padding: 0; }
 .home-list li + li { border-top: 1px solid var(--border); }

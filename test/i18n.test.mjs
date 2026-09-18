@@ -20,7 +20,7 @@ beforeAll(async () => {
   ({ MESSAGES } = globalThis.i18n);
 });
 
-const params = { n: 2, total: 5, name: 'Codex', label: 'x', path: '/w', date: 'd', when: 'w', period: 'p', day: 'd', hour: 3, title: 't', reason: 'r', withArtifacts: 1, empty: 1, current: 'a', next: 'b' };
+const params = { n: 2, total: 5, name: 'Codex', label: 'x', path: '/w', date: 'd', when: 'w', period: 'p', day: 'd', hour: 3, title: 't', reason: 'r', withArtifacts: 1, empty: 1, current: 'a', next: 'b', kind: 'Code', version: '1.0.0', rows: 3, cols: 2 };
 
 describe('다국어 사전', () => {
   test('두 언어의 키가 짝이 맞고 모든 문구가 글자로 나온다', () => {
