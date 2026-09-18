@@ -90,6 +90,16 @@ describe('찾아 둔 파일 다시 확인', () => {
     ]);
   });
 
+  test('NFD 이름의 파일도 같은 행으로 다시 확인한다 — 행이 둘로 갈라지지 않는다', async () => {
+    const path = join(dir, '홍길동_이력서_초안.md'.normalize('NFD'));
+    writeFileSync(path, '처음');
+    await ingestFile(store, path, codex);
+    writeFileSync(path, '나중에 고친 더 긴 내용');
+    await recheckKnownFiles(store);
+    expect(store.db.query('SELECT COUNT(*) AS n FROM artifacts').get().n).toBe(1);
+    expect(events().map((e) => e.kind)).toEqual(['created', 'modified']);
+  });
+
   test('바뀌지 않은 파일은 두 번 확인해도 기록이 없다', async () => {
     const path = join(dir, 'quiet.md');
     writeFileSync(path, 'x');
