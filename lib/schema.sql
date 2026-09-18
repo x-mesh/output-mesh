@@ -94,6 +94,22 @@ CREATE TABLE IF NOT EXISTS ingest_events (
 );
 CREATE INDEX IF NOT EXISTS idx_ingest_at ON ingest_events(at DESC);
 
+-- 무엇이 언제 생기고 바뀌고 사라졌나. 화면의 "방금 일어난 일"이 읽는다. 원본에서 다시 만들 수
+-- 없는 기록이지만 사용자 데이터도 아니라 오래된 줄은 지운다(EVENT_RETENTION_DAYS).
+-- kind: created | modified | moved | missing | restored,  source: agent(수집기가 봄) | disk(다시 확인이 봄)
+CREATE TABLE IF NOT EXISTS artifact_events (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  artifact_id INTEGER NOT NULL REFERENCES artifacts(id) ON DELETE CASCADE,
+  kind TEXT NOT NULL,
+  source TEXT NOT NULL,
+  collector TEXT,
+  provider TEXT,
+  session_ref TEXT,
+  at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_events_at ON artifact_events(at);
+CREATE INDEX IF NOT EXISTS idx_events_artifact ON artifact_events(artifact_id);
+
 CREATE TABLE IF NOT EXISTS collector_state (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 
 CREATE TABLE IF NOT EXISTS search_docs (

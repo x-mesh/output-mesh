@@ -44,7 +44,10 @@ switch (command) {
   }
 
   case 'sweep': {
+    // 빈 카탈로그의 첫 수집은 모든 파일이 "새로 생김"이다. 변경 기록을 그걸로 채우지 않는다.
+    store.quietEvents = store.isEmpty();
     for (const reader of readers) console.log(await collectOnce(store, reader));
+    store.quietEvents = false;
     console.log(store.counts());
     store.close();
     break;
