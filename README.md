@@ -30,7 +30,7 @@ Requires macOS and [Bun](https://bun.sh) 1.3 or newer. Nothing to install:
 bunx github:x-mesh/output-mesh
 ```
 
-Open http://127.0.0.1:19843. The interface is currently in Korean.
+Open http://127.0.0.1:19843. The interface speaks English and Korean: it follows your browser language, and `KO` / `EN` in the top bar switches it.
 
 The first run reads every agent log once and shows progress while it does (about 20 seconds for 3.6 GB of Codex logs on an Apple Silicon Mac). Later starts only read what changed.
 
