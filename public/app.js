@@ -13,6 +13,11 @@ const TREE_LIMIT = 5000;
 // 한 파일을 최대 17세션이 건드렸다. 전부 펼치면 정보 패널을 덮는다.
 const ORIGIN_PREVIEW_COUNT = 8;
 const HOME_LIST_COUNT = 6;
+// 변경 목록은 한 번에 이만큼 받고, 개요에는 앞의 몇 개만 둔다.
+const CHANGE_FEED_LIMIT = 20;
+const HOME_CHANGE_COUNT = 8;
+// 이 시간 안에 생기거나 바뀐 파일에는 트리에서 표시를 단다. 그 뒤로는 평범한 줄로 돌아간다.
+const FRESH_WINDOW_S = 10 * 60;
 const EXPLORER_WIDTH = { min: 240, max: 560, step: 16, initial: 340 };
 const LIVE_COALESCE_MS = 400;
 const SEARCH_DEBOUNCE_MS = 120;
@@ -40,6 +45,7 @@ const state = {
   showAllOrigins: false,
   searchOpen: {},
   detail: null,
+  changes: [],
   period: 'all',
 };
 // 선택할 때 트리를 다시 그리면 스크롤과 포커스가 튄다. 노드를 들고 있다가 속성만 바꾼다.
@@ -185,8 +191,17 @@ function providerChips(providers) {
     }, PROVIDER_LABEL[provider] ?? provider));
 }
 
+/** 최근에 생기거나 바뀐 파일의 표시. 사라짐은 트리에 행이 없으니 뺀다. */
+function freshKind(id) {
+  const since = Date.now() / 1000 - FRESH_WINDOW_S;
+  const latest = state.changes.find((change) => change.artifact_id === id);
+  return latest && latest.at >= since && latest.change !== 'missing' ? latest.change : null;
+}
+
 function badges(row, { compact = false } = {}) {
+  const fresh = freshKind(row.id);
   return keep([
+    fresh && el('span', { className: `badge fresh fresh-${fresh}` }, t(`fresh.${fresh}`)),
     // 여러 에이전트가 손댄 파일은 충돌이 아니라 중요도의 신호다.
     // SQLite 불리언은 0/1 이다. `0 && …` 은 0 을 남겨 화면에 "0" 이 찍힌다.
     !compact && (row.providers?.length ?? 0) > 1 && el('span', { className: 'badge multi' }, t('badge.agents', { n: row.providers.length })),
@@ -311,6 +326,15 @@ async function loadFacets() {
   const params = state.mode === 'activity' ? activityParams() : searchParams();
   state.facets = await api(`/api/facets?${params}`);
   return state.facets;
+}
+
+async function loadChanges() {
+  try {
+    state.changes = (await api(`/api/changes?${searchParams({ limit: CHANGE_FEED_LIMIT })}`)).changes;
+  } catch {
+    // 변경 목록은 보조 정보다. 못 받아도 트리와 개요는 그대로 그린다.
+    state.changes = [];
+  }
 }
 
 async function refreshFacets() {
@@ -784,8 +808,10 @@ async function refresh({ live = false } = {}) {
   const [{ rows, total }] = await Promise.all([
     api(`/api/search?${searchParams({ limit: TREE_LIMIT })}`),
     loadFacets(),
+    loadChanges(),
   ]);
-  const signature = rows.map((r) => `${r.id}:${r.mtime}:${r.state}:${r.favorite}`).join(',');
+  // 새 변경이 오면 파일 줄은 그대로여도 표시("새로")와 개요 목록이 바뀐다.
+  const signature = `${state.changes[0]?.id ?? 0}|${rows.map((r) => `${r.id}:${r.mtime}:${r.state}:${r.favorite}`).join(',')}`;
   const changed = !live || signature !== state.signature || $('rows').getAttribute('role') !== 'tree';
   state.rows = rows;
   state.total = total ?? rows.length;
@@ -1175,6 +1201,29 @@ function homeItem(row) {
       el('span', { className: 'home-meta' }, ...locationNodes(row), el('span', { className: 'when' }, relativeWhen(row.mtime)))));
 }
 
+/** 방금 일어난 일. 에이전트 기록으로 본 변화와 디스크를 다시 확인해 본 변화를 구분해 적는다. */
+function changesPanel() {
+  const items = state.changes.slice(0, HOME_CHANGE_COUNT);
+  return el('section', { className: 'changes' },
+    el('h3', {}, t('changes.title')),
+    items.length
+      ? el('ol', { className: 'change-list' }, ...items.map((change) =>
+          el('li', {}, el('button', {
+            type: 'button',
+            className: 'change-item',
+            onclick: () => select(change.artifact_id, { reveal: true }),
+          },
+            el('span', { className: `change-kind change-${change.change}` }, t(`change.${change.change}`)),
+            el('span', { className: 'change-name' }, change.file_name),
+            el('span', { className: 'change-where' }, ...locationNodes(change)),
+            el('span', { className: 'change-tags' }, ...keep([
+              change.provider && el('span', { className: 'chip static', attrs: { 'data-provider': change.provider } }, PROVIDER_LABEL[change.provider] ?? change.provider),
+              change.source === 'disk' && el('span', { className: 'change-outside', title: t('changes.outsideTitle') }, t('changes.outside')),
+            ])),
+            el('span', { className: 'when', title: fmtDate(change.at) }, relativeWhen(change.at))))))
+      : el('p', { className: 'hint' }, t('changes.empty')));
+}
+
 function homeList(title, rows, empty) {
   return el('section', { className: 'home-list' },
     el('h3', {}, title),
@@ -1222,6 +1271,7 @@ function dashboard(activity) {
       el('h2', {}, t(state.q.trim() ? 'home.search' : Object.keys(state.filters).length ? 'home.filter' : 'home.library')),
       el('p', { className: 'dash-sub' },
         [state.period !== 'all' && t(`periodTitle.${state.period}`), t('home.count', { n: state.total }), t('home.finals', { n: finals.length }), t('home.repos', { n: repos.size })].filter(Boolean).join(' · '))),
+    changesPanel(),
     activity ? activityPanel(activity) : el('p', { className: 'hint' }, t('home.activityFailed')),
     distributions(),
     el('div', { className: 'dash-grid' },
