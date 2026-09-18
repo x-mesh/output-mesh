@@ -24,25 +24,23 @@ output-mesh 는 그 자리들을 **건드리지 않고 읽기만 해서** 라이
 
 ## 시작하기
 
-macOS 와 [Bun](https://bun.sh) 1.3 이상이 필요하다.
+macOS 와 [Bun](https://bun.sh) 1.3 이상이 필요하다. 설치할 것은 없다.
 
 ```bash
-git clone https://github.com/x-mesh/output-mesh.git
-cd output-mesh
-bun bin/output-mesh.mjs
+bunx github:x-mesh/output-mesh
 ```
 
 http://127.0.0.1:19843 을 연다.
 
 처음 실행하면 에이전트 로그를 한 번 모두 읽고, 그동안 진행 상황을 보여준다(Apple Silicon Mac 에서 Codex 로그 3.6 GB 기준 약 20초). 다음부터는 바뀐 것만 읽는다.
 
-npm 에 배포되면 저장소를 받지 않고 바로 실행할 수 있다.
+`npx` 로는 돌지 않는다. Bun 에 내장된 SQLite 를 쓰기 때문이다. 저장소를 받아서 돌리려면:
 
 ```bash
-bunx output-mesh
+git clone https://github.com/x-mesh/output-mesh.git
+cd output-mesh
+bun bin/output-mesh.mjs
 ```
-
-`npx` 로는 돌지 않는다. Bun 에 내장된 SQLite 를 쓰기 때문이다.
 
 ## 무엇을 모으나
 

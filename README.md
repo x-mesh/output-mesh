@@ -24,25 +24,23 @@ output-mesh reads those places **without touching them** and gives you one libra
 
 ## Quick start
 
-Requires macOS and [Bun](https://bun.sh) 1.3 or newer.
+Requires macOS and [Bun](https://bun.sh) 1.3 or newer. Nothing to install:
 
 ```bash
-git clone https://github.com/x-mesh/output-mesh.git
-cd output-mesh
-bun bin/output-mesh.mjs
+bunx github:x-mesh/output-mesh
 ```
 
 Open http://127.0.0.1:19843. The interface is currently in Korean.
 
 The first run reads every agent log once and shows progress while it does (about 20 seconds for 3.6 GB of Codex logs on an Apple Silicon Mac). Later starts only read what changed.
 
-Once published to npm, it runs without cloning:
+`npx` will not work: output-mesh uses Bun's built-in SQLite. To run from a checkout instead:
 
 ```bash
-bunx output-mesh
+git clone https://github.com/x-mesh/output-mesh.git
+cd output-mesh
+bun bin/output-mesh.mjs
 ```
-
-`npx` will not work: output-mesh uses Bun's built-in SQLite.
 
 ## What it collects
 
