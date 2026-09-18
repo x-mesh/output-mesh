@@ -305,6 +305,8 @@ kbd {
   border-top: 1px solid var(--border);
 }
 .explorer-head .icon-button { width: 22px; min-height: 22px; }
+.explorer-foot #out-of-scope { margin-right: auto; }
+.version { font-family: var(--mono); font-size: var(--text-xs); color: var(--text-dim); white-space: nowrap; }
 .explorer-head #summary { margin-right: auto; }
 .group-by { display: inline-flex; align-items: center; gap: var(--space-1); margin-right: var(--space-1); }
 .group-by select {
@@ -317,7 +319,7 @@ kbd {
 .dot { width: 8px; height: 8px; margin: 0 4px; flex-shrink: 0; border-radius: 50%; background: var(--series, var(--aside)); }
 
 .explorer-foot {
-  display: flex; align-items: center; justify-content: space-between; gap: var(--space-2);
+  display: flex; align-items: center; gap: var(--space-3);
   padding: var(--space-2) var(--space-3);
   border-top: 1px solid var(--border);
   font-size: var(--text-xs);

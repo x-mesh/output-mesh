@@ -8,9 +8,16 @@ import { startServer } from '../lib/server.mjs';
 import { surveyCoverage, REASON_LABEL } from '../lib/coverage.mjs';
 import { CATALOG_DB, DEFAULT_HOST, DEFAULT_PORT } from '../lib/paths.mjs';
 import { collectProgressText, createSpinner } from '../lib/spinner.mjs';
+import { NAME, VERSION } from '../lib/version.mjs';
 
 const args = process.argv.slice(2);
 const command = args[0] ?? 'serve';
+
+// 버전만 물었는데 카탈로그를 열면 DB 폴더를 만들고 스키마를 고친다. 그 전에 답하고 끝낸다.
+if (['--version', '-v', 'version'].includes(command)) {
+  console.log(`${NAME} ${VERSION}`);
+  process.exit(0);
+}
 
 function flag(name, fallback) {
   const at = args.indexOf(name);
@@ -34,7 +41,7 @@ switch (command) {
     const seconds = ((performance.now() - started) / 1000).toFixed(1);
     spinner.stop(`수집 완료  ${store.counts().artifacts.toLocaleString('ko-KR')}개 · ${seconds}초`);
     await startServer({ store, watcher, readers }, { port, host: DEFAULT_HOST });
-    console.log(`output-mesh  http://${DEFAULT_HOST}:${port}  (${store.counts().artifacts}개 수집됨)`);
+    console.log(`${NAME} ${VERSION}  http://${DEFAULT_HOST}:${port}  (${store.counts().artifacts}개 수집됨)`);
     process.on('SIGINT', () => {
       watcher.stop();
       store.close();
@@ -91,6 +98,7 @@ switch (command) {
     } catch {}
     probe.close();
     console.log({
+      version: VERSION,
       catalogDb: store.db.filename,
       journalMode: store.journalMode(),
       fts5Trigram: fts5,
@@ -104,6 +112,6 @@ switch (command) {
   }
 
   default:
-    console.error(`알 수 없는 명령: ${command}\n사용법: output-mesh [serve|sweep|import <path>|coverage|doctor] [--port N] [--db PATH]`);
+    console.error(`알 수 없는 명령: ${command}\n사용법: output-mesh [serve|sweep|import <path>|coverage|doctor|--version] [--port N] [--db PATH]`);
     process.exit(2);
 }

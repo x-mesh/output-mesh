@@ -126,6 +126,11 @@ describe('API', () => {
     expect((await get('/api/artifact/999999/sheet')).status).toBe(404);
   });
 
+  test('화면이 쓰는 버전은 package.json 과 같다', async () => {
+    const { VERSION } = await import('../lib/version.mjs');
+    expect(await (await get('/api/version')).json()).toEqual({ name: 'output-mesh', version: VERSION });
+  });
+
   test('태그를 붙이면 즉시 검색된다', async () => {
     await post(`/api/artifact/${htmlId}/tag`, { name: '데모' });
     const { rows } = await (await get('/api/search?q=' + encodeURIComponent('데모'))).json();
