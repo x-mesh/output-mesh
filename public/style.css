@@ -438,6 +438,34 @@ embed.preview-fill { height: 100%; }
 }
 .preview-image { flex: 1; min-height: 0; display: grid; place-items: center; padding: var(--space-5); background: var(--bg-side); overflow: auto; }
 .preview-image img { max-width: 100%; max-height: 100%; object-fit: contain; box-shadow: 0 1px 3px rgba(0, 0, 0, .14); background: var(--bg); }
+.sheet { overflow: hidden; }
+.sheet-tabs {
+  display: flex; align-items: flex-end; gap: 2px; flex-shrink: 0;
+  padding: var(--space-2) var(--space-3) 0; overflow-x: auto;
+  border-bottom: 1px solid var(--border); background: var(--bg-side);
+}
+.sheet-tabs button {
+  min-height: 26px; margin-bottom: -1px; white-space: nowrap;
+  border: 1px solid transparent; border-bottom: none; border-radius: var(--radius) var(--radius) 0 0;
+  background: none; color: var(--text-dim);
+}
+.sheet-tabs button:hover { background: var(--bg-hover); color: var(--text); }
+.sheet-tabs button[aria-selected="true"] { background: var(--bg); border-color: var(--border); color: var(--text); font-weight: 600; }
+.sheet-more { margin: 0 0 var(--space-1) var(--space-2); white-space: nowrap; }
+.sheet-body { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.sheet-scroll { flex: 1; min-height: 0; overflow: auto; }
+.sheet-table { border-collapse: separate; border-spacing: 0; font-size: var(--text-sm); font-variant-numeric: tabular-nums; }
+.sheet-table th, .sheet-table td {
+  max-width: 320px; padding: 3px var(--space-2);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left;
+  border-right: 1px solid var(--border); border-bottom: 1px solid var(--border);
+}
+.sheet-table td.num { text-align: right; }
+/* 스크롤해도 열 문자와 행 번호가 남는다. 모서리 칸은 둘 다에 붙어 가장 위에 온다. */
+.sheet-table thead th { position: sticky; top: 0; z-index: calc(var(--z-sticky) + 1); background: var(--bg-side); color: var(--text-dim); font-weight: 500; text-align: center; }
+.sheet-table tbody th { position: sticky; left: 0; z-index: var(--z-sticky); background: var(--bg-side); color: var(--text-dim); font-weight: 400; text-align: right; }
+.sheet-table thead th.corner { left: 0; z-index: calc(var(--z-sticky) + 2); }
+.sheet-note { margin: 0; padding: var(--space-2) var(--space-3); flex-shrink: 0; border-top: 1px solid var(--border); }
 .preview-note { margin: auto; padding: var(--space-6); text-align: center; color: var(--text-dim); }
 .preview-note p { margin: 0 0 var(--space-3); }
 

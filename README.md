@@ -94,6 +94,7 @@ Your catalog lives in `~/Library/Application Support/AgentOutputCatalog/catalog.
 - Spreadsheet text extraction uses the system `unzip`.
 - Importing from `~/Downloads`, `~/Desktop`, or `~/Documents` needs Full Disk Access for the `bun` binary once.
 - Files Claude Code writes through the shell (not the `Write` tool) leave no path in the log and are not discovered.
+- Spreadsheet previews show values only (first 200 rows and 30 columns per sheet): no formatting, merged cells, or charts.
 - PDF previews work; PDF text search does not yet. Images are not OCR'd.
 
 ## Development
