@@ -3,7 +3,7 @@
   "version": "0.2.0",
   "description": "Local catalog of what your AI agents made: search, preview, and trace every artifact back to the session that wrote it",
   "type": "module",
-  "bin": { "output-mesh": "./bin/output-mesh.mjs" },
+  "bin": { "output-mesh": "bin/output-mesh.mjs" },
   "files": ["bin", "lib", "public"],
   "scripts": {
     "start": "bun bin/output-mesh.mjs serve",
