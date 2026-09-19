@@ -27,8 +27,10 @@ output-mesh 는 그 자리들을 **건드리지 않고 읽기만 해서** 라이
 macOS 와 [Bun](https://bun.sh) 1.3 이상이 필요하다. 설치할 것은 없다.
 
 ```bash
-bunx github:x-mesh/output-mesh
+bunx output-mesh
 ```
+
+Bun 이 받은 패키지를 보관해 두므로 다음부터는 바로 뜬다. 새 릴리스를 받으려면 `bunx output-mesh@latest`, `main` 의 최신 커밋은 `bunx github:x-mesh/output-mesh` 로 돌린다.
 
 http://127.0.0.1:19843 을 연다. 화면은 영어와 한국어를 지원한다. 브라우저 언어를 따르고, 상단 바의 `KO` / `EN` 으로 바꾼다. 터미널 출력(첫 실행 진행 표시, 명령 도움말)은 아직 한국어만이다.
 

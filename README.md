@@ -27,8 +27,10 @@ output-mesh reads those places **without touching them** and gives you one libra
 Requires macOS and [Bun](https://bun.sh) 1.3 or newer. Nothing to install:
 
 ```bash
-bunx github:x-mesh/output-mesh
+bunx output-mesh
 ```
+
+Bun keeps the downloaded package, so later runs start right away. Use `bunx output-mesh@latest` to pick up a new release, or `bunx github:x-mesh/output-mesh` for the latest commit on `main`.
 
 Open http://127.0.0.1:19843. The interface speaks English and Korean: it follows your browser language, and `KO` / `EN` in the top bar switches it. Terminal output (the first-run progress and command help) is Korean for now.
 

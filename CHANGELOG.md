@@ -8,6 +8,14 @@ lives in `package.json`; `output-mesh --version` and the explorer footer show it
 
 ## [Unreleased]
 
+### Changed
+
+- published to npm: run it with `bunx output-mesh`
+
+### Fixed
+
+- `package.json` lists the command as `bin/output-mesh.mjs` without `./`, so npm 11 no longer warns that it removed the command when publishing
+
 ## [0.2.0] - 2026-09-18
 
 ### Added
