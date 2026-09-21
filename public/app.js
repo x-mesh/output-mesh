@@ -19,6 +19,9 @@ const CHANGE_PAGE_SIZE = 30;
 const FRESH_WINDOW_S = 10 * 60;
 // 미리보기에서 칠하는 일치의 상한. 2MB 로그에서 흔한 낱말을 찾으면 수만 곳이 맞아 화면이 멈춘다.
 const MAX_PREVIEW_MARKS = 500;
+// 문법 색칠은 화면에서만 도는 일이다. 큰 파일은 접는다 — 2MB 로그를 토큰으로 쪼개면
+// 메인 스레드가 몇 초 멈추고, 그런 파일에서 색이 주는 값도 없다.
+const MAX_HIGHLIGHT_BYTES = 256 * 1024;
 // 격리된 문서 안에서 첫 일치가 받는 id. 부모는 이 이름으로만 그 자리를 가리킬 수 있다.
 const PREVIEW_HIT_ID = 'aoc-search-hit';
 const EXPLORER_WIDTH = { min: 240, max: 560, step: 16, initial: 340 };
@@ -287,6 +290,54 @@ function highlighted(text, limit = Infinity) {
     nodes.push(i % 2 === 1 ? el('mark', {}, parts[i]) : parts[i]);
   }
   return nodes;
+}
+
+/**
+ * 문법 색칠. `highlightElement` 대신 `tokenize` 를 쓴다 — 그쪽은 innerHTML 로 넣는데, 여기는
+ * 에이전트가 만든 파일을 **우리 문서 안에서** 그리는 자리라 문자열을 HTML 로 되돌리지 않는다.
+ * 토큰마다 노드를 만들면 검색어 표시(`<mark>`)를 그 안에 그대로 섞을 수 있다.
+ */
+const SHJ_LANG = {
+  js: 'js', mjs: 'js', cjs: 'js', jsx: 'js', ts: 'ts', tsx: 'ts', mts: 'ts',
+  py: 'py', go: 'go', rs: 'rs', java: 'java', lua: 'lua', pl: 'pl', pm: 'pl',
+  // shj 에 Swift 문법이 없다. 실측 321개라 그냥 두기엔 많아서 c 로 보낸다 — 주석·문자열·타입·
+  // 함수명은 잡히고 func·let 은 색이 안 붙을 뿐, 틀리게 칠해지지는 않는다.
+  c: 'c', h: 'c', cc: 'c', cpp: 'c', hpp: 'c', cs: 'c', swift: 'c',
+  sh: 'bash', bash: 'bash', zsh: 'bash', fish: 'bash',
+  json: 'json', yaml: 'yaml', yml: 'yaml', toml: 'toml', ini: 'ini', cfg: 'ini',
+  sql: 'sql', css: 'css', scss: 'css', html: 'html', htm: 'html',
+  xml: 'xml', svg: 'xml', plist: 'xml', drawio: 'xml',
+  md: 'md', markdown: 'md', diff: 'diff', patch: 'diff', log: 'log', asm: 'asm', s: 'asm',
+};
+const SHJ_FILENAME = { Makefile: 'make', Dockerfile: 'docker', Justfile: 'make' };
+
+const langOf = (ext, fileName) => SHJ_FILENAME[fileName] ?? SHJ_LANG[ext];
+
+async function codeNodes(text, lang, limit) {
+  const { tokenize } = await import('/vendor/shj/index.js');
+  const nodes = [];
+  let budget = limit;
+  await tokenize(text, lang, (chunk, type) => {
+    if (!chunk) return;
+    const inner = highlighted(chunk, budget);
+    budget -= inner.filter((node) => node instanceof Node).length;
+    if (type) nodes.push(el('span', { className: `shj-syn-${type}` }, ...inner));
+    else nodes.push(...inner);
+  });
+  return nodes;
+}
+
+/** 색칠이 안 되는 형식이거나 너무 크면 지금까지처럼 글자만 보인다. 실패해도 마찬가지다. */
+async function codePre(text, ext, fileName) {
+  const lang = text.length <= MAX_HIGHLIGHT_BYTES ? langOf(ext, fileName) : undefined;
+  if (lang) {
+    try {
+      return el('pre', { className: 'preview-text shj', attrs: { 'data-lang': lang } }, ...await codeNodes(text, lang, MAX_PREVIEW_MARKS));
+    } catch {
+      // 언어 파일을 못 받았거나 토큰화가 터졌다. 글자는 보여야 한다.
+    }
+  }
+  return el('pre', { className: 'preview-text' }, ...highlighted(text, MAX_PREVIEW_MARKS));
 }
 
 function renderPeriod() {
@@ -1553,13 +1604,14 @@ function render(detail) {
   if (TEXT_KINDS.has(source.kind) && !detail.missing_at && (state.member || !detail.bundle_files)) {
     fetch(`/artifact/${detail.id}/raw${source.query}`)
       .then((r) => r.text())
-      .then((text) => {
+      .then(async (text) => {
         const box = document.getElementById('text-preview');
         if (!box || state.selected !== detail.id) return;
         const rendered = MARKDOWN_EXT.has(source.ext) && !state.rawMode;
-        box.replaceChildren(rendered
-          ? markdownFrame(text, source.name)
-          : el('pre', { className: 'preview-text' }, ...highlighted(text, MAX_PREVIEW_MARKS)));
+        const node = rendered ? markdownFrame(text, source.name) : await codePre(text, source.ext, source.name);
+        // 언어 파일을 받는 동안 다른 파일을 골랐을 수 있다. 그 자리에 옛 내용을 덮지 않는다.
+        if (!box.isConnected || state.selected !== detail.id) return;
+        box.replaceChildren(node);
         box.querySelector('pre mark')?.scrollIntoView({ block: 'center' });
       })
       .catch(() => {
