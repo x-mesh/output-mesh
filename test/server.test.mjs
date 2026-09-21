@@ -37,7 +37,7 @@ beforeAll(async () => {
     + '</root></mxGraphModel></diagram></mxfile>');
   writeFileSync(join(artifactsDir, 'flow.drawio'),
     '<mxfile><diagram name="main"><mxGraphModel><root>'
-    + '<mxCell id="2" value="&lt;b&gt;결제 서버&lt;/b&gt;" style="shape=image;fillColor=none"/>'
+    + '<mxCell id="2" value="&lt;b&gt;결제 서버&lt;/b&gt;" style="shape=image;image=img/lib/mscae/API_Management.svg"/>'
     + '</root></mxGraphModel></diagram></mxfile>');
   const bundleDir = join(artifactsDir, 'rack-mesh-drawio-spaces');
   mkdirSync(join(bundleDir, 'inner'), { recursive: true });
@@ -198,6 +198,19 @@ describe('drawio 는 읽기 전용 뷰어로 그린다', () => {
     const body = await res.text();
     expect(body).toContain('/drawio-frame.js');
     expect(body).toContain('mxGraphModel');
+  });
+
+  test('도형 아이콘만 바깥에서 받는다 — 스크립트가 부를 길은 닫아 둔다', async () => {
+    const csp = (await get(`/artifact/${drawioId}/drawio`)).headers.get('content-security-policy');
+    expect(csp).toContain('img-src data: https:');
+    expect(csp).toContain("connect-src 'none'");
+    expect(csp).toContain("default-src 'none'");
+  });
+
+  test('drawio 서버의 상대경로 도형은 원래 자리로 돌린다 — 우리 주소에서는 404 다', async () => {
+    const body = await (await get(`/artifact/${drawioId}/drawio`)).text();
+    expect(body).toContain('https://app.diagrams.net/img/lib/mscae/API_Management.svg');
+    expect(body).not.toContain('image=img/lib/');
   });
 
   test("스크립트 출처를 'self' 가 아니라 실제 주소로 적는다 — 샌드박스 오리진은 불투명하다", async () => {
