@@ -24,6 +24,9 @@
     ko: {
       'brand.home': '개요로 가기',
       'nodes.aria': '노드', 'nodes.here': '이 기기', 'nodes.open': ({ name }) => `${name} 의 카탈로그 열기`,
+      'nodes.silent': ({ n }) => `output-mesh 가 없는 기기 ${num(n)}곳`,
+      'nodes.offline': ({ n }) => `꺼진 기기 ${num(n)}곳`,
+      'nodes.add': '다른 기기에서 이어 붙이려면, 그 기기에서:',
       'aria.modes': '보기',
       'mode.library': '라이브러리',
       'mode.activity': '활동',
@@ -199,6 +202,9 @@
     en: {
       'brand.home': 'Go to overview',
       'nodes.aria': 'Nodes', 'nodes.here': 'this machine', 'nodes.open': ({ name }) => `Open the catalog on ${name}`,
+      'nodes.silent': ({ n }) => `${num(n)} without output-mesh`,
+      'nodes.offline': ({ n }) => `${num(n)} offline`,
+      'nodes.add': 'To add another machine, run this there:',
       'aria.modes': 'View',
       'mode.library': 'Library',
       'mode.activity': 'Activity',

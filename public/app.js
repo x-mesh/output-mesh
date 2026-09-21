@@ -2551,21 +2551,61 @@ $('home').addEventListener('click', () => goHome());
 /**
  * tailnet 의 다른 기기에서도 같은 카탈로그가 돈다. 산출물은 그 기기에 남으므로 합쳐 보이지 않고
  * 화면을 통째로 그 기기로 옮긴다 — 같은 오리진이라 목록도 미리보기도 그대로 된다.
- * 혼자 쓰는 기기(tailnet 없음, 이웃 없음)에서는 아예 보이지 않는다.
+ * 혼자 쓰는 기기(tailnet 없음)에서는 아예 보이지 않는다.
  */
+let nodesOpen = false;
+
+/**
+ * 이어지지 않은 기기는 이름을 늘어놓지 않고 수로만 적는다. tailnet 에는 아이폰이나 다른 용도
+ * 서버가 스물 넘게 있어서(실측 21곳), 전부 "여기에 설치하라"고 적으면 그게 소음이 된다.
+ * 붙이는 방법은 한 번만 보인다.
+ */
+function nodesPanel(found) {
+  const silent = found.nodes.filter((node) => node.status === 'silent');
+  const offline = found.nodes.filter((node) => node.status === 'offline');
+  return el('div', { className: 'nodes-panel', attrs: { role: 'group', 'aria-label': t('nodes.aria') } },
+    el('ul', {},
+      ...found.nodes
+        .filter((node) => node.status === 'self' || node.status === 'connected')
+        .map((node) => el('li', { className: `node-row is-${node.status}` },
+          el('span', { className: 'node-dot' }),
+          node.status === 'self'
+            ? el('span', {}, node.name, el('span', { className: 'dim' }, ` ${t('nodes.here')}`))
+            : el('a', { href: node.url }, node.name),
+          el('span', { className: 'dim push' }, node.version ?? ''))),
+      silent.length > 0 && el('li', { className: 'node-row is-silent' },
+        el('span', { className: 'node-dot' }),
+        el('span', { className: 'dim', title: silent.map((node) => node.name).join(', ') }, t('nodes.silent', { n: silent.length }))),
+      offline.length > 0 && el('li', { className: 'node-row is-offline' },
+        el('span', { className: 'node-dot' }),
+        el('span', { className: 'dim', title: offline.map((node) => node.name).join(', ') }, t('nodes.offline', { n: offline.length })))),
+    el('p', { className: 'hint' }, t('nodes.add')),
+    el('pre', {}, `output-mesh install\ntailscale serve --bg 19843`));
+}
+
 async function renderNodes() {
   const found = await api('/api/peers').catch(() => null);
-  if (!found || found.peers.length === 0) return;
+  if (!found || found.nodes.length === 0) return;
   const box = $('nodes');
   box.hidden = false;
   box.setAttribute('aria-label', t('nodes.aria'));
   box.replaceChildren(
-    el('span', { className: 'node-here', title: t('nodes.here') }, found.self ?? t('nodes.here')),
+    el('button', {
+      type: 'button',
+      className: 'node-here',
+      attrs: { 'aria-expanded': String(nodesOpen) },
+      title: t('nodes.here'),
+      onclick: () => {
+        nodesOpen = !nodesOpen;
+        void renderNodes();
+      },
+    }, found.self ?? t('nodes.here')),
     ...found.peers.map((peer) => el('a', {
       className: 'node-peer',
       href: peer.url,
       title: t('nodes.open', { name: peer.name }),
-    }, peer.name)));
+    }, peer.name)),
+    nodesOpen && nodesPanel(found));
 }
 
 // ── 언어 ───────────────────────────────────────────────────────────────

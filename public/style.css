@@ -191,6 +191,30 @@ kbd {
 }
 .node-peer:hover { background: var(--bg-hover); color: var(--text); }
 .node-peer:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.node-here[aria-expanded="true"] { background: var(--accent-soft); color: var(--accent); }
+
+/* 노드 패널. 이어진 것만 이름을 적고 나머지는 수로만 적는다 — tailnet 기기가 스물을 넘는다. */
+.nodes { position: relative; }
+.nodes-panel {
+  position: absolute; top: calc(100% + 6px); left: 0; z-index: var(--z-dialog);
+  min-width: 260px; padding: var(--space-3);
+  background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, .18);
+}
+.nodes-panel ul { list-style: none; margin: 0 0 var(--space-3); padding: 0; display: grid; gap: 3px; }
+.node-row { display: flex; align-items: center; gap: var(--space-2); font-size: var(--text-xs); white-space: nowrap; }
+.node-row .push { margin-left: auto; }
+.node-row a { color: var(--accent); text-decoration: none; }
+.node-row a:hover { text-decoration: underline; }
+.node-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--text-dim); flex-shrink: 0; }
+.is-connected .node-dot { background: var(--final); }
+.is-self .node-dot { background: var(--accent); }
+.is-offline .node-dot { background: transparent; border: 1px solid var(--border-strong); }
+.nodes-panel pre {
+  margin: var(--space-1) 0 0; padding: var(--space-2);
+  background: var(--bg-side); border-radius: var(--radius-sm);
+  font: var(--text-xs)/1.6 var(--mono); white-space: pre; overflow-x: auto;
+}
 
 .modes { display: flex; padding: 2px; border-radius: 7px; background: var(--bg-track); }
 .modes button {
