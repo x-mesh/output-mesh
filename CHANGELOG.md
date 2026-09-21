@@ -6,6 +6,53 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project follows [Semantic Versioning](https://semver.org/). The version
 lives in `package.json`; `output-mesh --version` and the explorer footer show it.
 
+## [Unreleased]
+
+## [0.6.0] - 2026-09-21
+
+### Added
+
+- **preview:** highlight code with `@speed-highlight/core`. Tokens become DOM nodes, so search matches stay visible inside them
+- **preview:** number the lines of a code file. Each line carries its own number, so a wrapped line keeps the number beside its first row, and a copy leaves the numbers out
+
+### Fixed
+
+- **collect:** stop two commands on one catalog from writing at the same time
+
+## [0.5.1] - 2026-09-21
+
+### Fixed
+
+- **mesh:** remove the word "false" that appeared in the top bar beside the node names
+
+## [0.5.0] - 2026-09-21
+
+### Added
+
+- **mesh:** list every tailnet node with its state. A node that runs output-mesh becomes a link; the rest are counted, with the command to add one
+
+## [0.4.1] - 2026-09-21
+
+### Fixed
+
+- **cli:** take the port before collecting. A second instance used to parse every log first and fail at the end
+- **cli:** record the running instance, so `stop` and `status` also find one started by hand. Before this, only `pkill` could stop it
+
+## [0.4.0] - 2026-09-21
+
+### Added
+
+- **mesh:** switch to another tailnet node from the top bar. Each node keeps its own catalog and serves its own files
+- **cli:** run it as a background service with `install`, and control it with `start`, `stop`, `restart`, and `status`
+
+### Changed
+
+- published to npm: run it with `bunx output-mesh`
+
+### Fixed
+
+- `package.json` lists the command as `bin/output-mesh.mjs` without `./`, so npm 11 no longer warns that it removed the command when publishing
+
 ## [0.3.0] - 2026-09-21
 
 ### Added
@@ -22,47 +69,6 @@ lives in `package.json`; `output-mesh --version` and the explorer footer show it
 - **library:** add worktree locations, improved document titles, two-character search, and bundle members
 - **overview:** align search, feed, workspace, activity, and period filters
 - **cli:** show catalog status and use English terminal output
-
-## [Unreleased]
-
-## [0.6.0] - 2026-09-21
-
-### Added
-
-- 코드 미리보기에 줄 번호를 단다
-- 코드 미리보기에 문법 색칠을 넣는다
-
-### Fixed
-
-- **collection:** prevent catalog writer collisions
-
-## [0.5.1] - 2026-09-21
-
-### Fixed
-
-- 상단 바에 뜨던 "false" 를 없앤다
-
-## [0.5.0] - 2026-09-21
-
-### Added
-
-- 못 이어진 노드도 이유와 함께 보인다
-
-## [0.4.1] - 2026-09-21
-
-### Fixed
-
-- 중복으로 띄워도 버리는 것 없이 알리고 멈춘다
-
-## [0.4.0] - 2026-09-21
-
-### Changed
-
-- published to npm: run it with `bunx output-mesh`
-
-### Fixed
-
-- `package.json` lists the command as `bin/output-mesh.mjs` without `./`, so npm 11 no longer warns that it removed the command when publishing
 
 ## [0.2.0] - 2026-09-18
 
