@@ -22,6 +22,13 @@ Agents write reports, PRDs, spreadsheets, HTML prototypes, and images into sessi
 
 output-mesh reads those places **without touching them** and gives you one library: searchable by file name, body, and the task that produced it, with the originating agent, session, and repository attached to every file.
 
+<p align="center">
+  <img src="./assets/demo.gif" alt="output-mesh: browse the library, open an artifact with its originating agent and session, search by task, and watch a new file appear live" width="900" />
+</p>
+
+<p align="center"><sub>Recorded against isolated sample data, not real logs.</sub></p>
+
+
 ## Quick start
 
 Requires macOS and [Bun](https://bun.sh) 1.3 or newer. Nothing to install:
