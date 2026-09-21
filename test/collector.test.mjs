@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { CatalogStore } from '../lib/store.mjs';
 import { AsideReader } from '../lib/aside-reader.mjs';
-import { collectOnce, enrich, sweep } from '../lib/collector.mjs';
+import { collectOnce, enrich, ingestWorkspaceDoc, sweep } from '../lib/collector.mjs';
 import { Watcher } from '../lib/watcher.mjs';
 import { search } from '../lib/search.mjs';
 import { nfc } from '../lib/paths.mjs';
@@ -305,5 +305,43 @@ describe('번들 — 프로젝트 폴더를 한 줄로', () => {
 
     expect(store.db.query('SELECT COUNT(*) n FROM artifacts WHERE bundle_files IS NOT NULL').get().n).toBe(0);
     expect(store.counts().artifacts).toBe(1);
+  });
+});
+
+describe('세션이 아는 제목은 files_changed 가 없어도 붙는다', () => {
+  test('파일은 썼는데 그 기록이 없는 세션도 제목과 공급자를 갖는다 — 트리에서 익명 더미가 되던 실패', async () => {
+    writeFileSync(join(artifactsDir, 'note.md'), '내용');
+    // 세션은 있고 제목도 있는데 files_changed 가 빈 경우. 보강의 조인으로는 제목을 못 얻는다.
+    buildStateDb([{ filesChanged: JSON.stringify([]) }]);
+
+    await sweep(store, reader);
+    const [origin] = store.originsOf(store.byPathKey(nfc(join(artifactsDir, 'note.md'))).id);
+    expect([origin.session_title, origin.provider]).toEqual(['테스트 세션', 'claude-code']);
+  });
+
+  test('Aside DB 에 없는 세션은 제목 없이 남는다 — 지어내지 않는다', async () => {
+    writeFileSync(join(artifactsDir, 'orphan.md'), '내용');
+    await sweep(store, reader);
+    const [origin] = store.originsOf(store.byPathKey(nfc(join(artifactsDir, 'orphan.md'))).id);
+    expect([origin.session_title, origin.provider]).toEqual([null, null]);
+  });
+});
+
+describe('폴더를 파일로 넘기지 않는다 — sweep_failed EISDIR 의 원인', () => {
+  test('보강이 산출물 표시가 붙은 폴더를 만나도 수집이 멈추지 않는다', async () => {
+    // 에이전트가 artifacts/ 안에 폴더를 만들고 state.db 가 거기에 산출물 표시를 붙인 경우.
+    mkdirSync(join(artifactsDir, 'gen-app'), { recursive: true });
+    buildStateDb([{ filesChanged: JSON.stringify([{ path: 'artifacts/gen-app', type: 'write', artifact: { sizeBytes: 12 } }]) }]);
+
+    const stats = await enrich(store, reader);
+    expect(stats.widened).toBe(0);
+    expect(store.byPathKey(nfc(join(artifactsDir, 'gen-app')))).toBeNull();
+  });
+
+  test('작업공간 문서 수집이 폴더를 건너뛴다 — fs.watch 는 폴더 생성도 알린다', async () => {
+    const docs = join(dir, 'repo', 'docs.md');
+    mkdirSync(docs, { recursive: true });
+    expect(await ingestWorkspaceDoc(store, docs, join(dir, 'repo'))).toEqual({ rule: 'skipped-not-file' });
+    expect(store.counts().artifacts).toBe(0);
   });
 });

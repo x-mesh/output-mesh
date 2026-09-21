@@ -173,13 +173,13 @@ function icon(name, className = '') {
   return svg;
 }
 
-const PROVIDER_LABEL = { 'openai-codex': 'Codex', 'claude-code': 'Claude Code', 'ai-mesh': 'ai-mesh', aside: 'Aside' };
-const COLLECTOR_NAME = { codex: 'Codex', 'claude-code': 'Claude Code', aside: 'Aside' };
+const PROVIDER_LABEL = { 'openai-codex': 'Codex', 'claude-code': 'Claude Code', 'ai-mesh': 'ai-mesh', aside: 'Aside', cursor: 'Cursor' };
+const COLLECTOR_NAME = { codex: 'Codex', 'claude-code': 'Claude Code', aside: 'Aside', cursor: 'Cursor' };
 const collectorLabel = (collector) => COLLECTOR_NAME[collector] ?? tOr(`collector.${collector}`, t('collector.import'));
 const stateLabel = (value) => tOr(`state.${value}`, value);
 const kindLabel = (value) => tOr(`kind.${value ?? 'unclassified'}`, value);
 // 활동 카드는 수집기 이름을 단다. Aside 가 실어 온 Claude 세션에 Claude 색을 칠하면 수집기를 잘못 말한다.
-const PROVIDER_OF_COLLECTOR = { codex: 'openai-codex', 'claude-code': 'claude-code' };
+const PROVIDER_OF_COLLECTOR = { codex: 'openai-codex', 'claude-code': 'claude-code', cursor: 'cursor' };
 const subtitleSource = (source) => tOr(`subtitle.${source}`, '');
 
 /** 출처에서 파생된 분류. 누르면 그 에이전트로 좁힌다 — 행 선택과 겹치지 않게 전파를 끊는다. */
@@ -557,6 +557,22 @@ function renderStats() {
 // 저장소 → 폴더 → 파일. 위치 정보(describe.mjs)를 그대로 경로로 쓴다. 작업공간이 없는
 // Aside 산출물은 수집기 아래 작업 제목으로 묶는다 — 거기서는 작업이 곧 폴더다.
 
+// 세션 폴더의 짧은 id. 세션 디렉터리는 `<날짜>_<id>` 라 날짜와 함께 쓰면 사람이 구분할 수 있다.
+const SESSION_ID_CHARS = 7;
+
+/**
+ * 제목 없는 세션은 서로 다른 작업이다. 이름을 그대로 폴더로 쓰면 전부 한 더미로 합쳐진다 —
+ * 실측에서 Aside 세션 16개가 "제목 없는 작업" 한 줄이 됐다. 날짜와 짧은 세션 id 로 갈라 놓는다.
+ * 제목이 같은 세션은 그대로 합친다. 되풀이하는 작업(데일리 브리핑)은 한 폴더인 편이 읽기 쉽다.
+ */
+function sessionLabel(row) {
+  if (row.session_title) return row.session_title;
+  const dated = row.session_dir?.split('/').pop()?.match(/^(\d{4}-\d{2}-\d{2})_(.+)$/);
+  if (dated) return `${dated[1]} · ${dated[2].slice(0, SESSION_ID_CHARS)}`;
+  if (row.session_ref) return `${t('tree.untitledTask')} · ${row.session_ref.slice(0, SESSION_ID_CHARS)}`;
+  return t('tree.untitledTask');
+}
+
 function treePlacement(row) {
   const where = row.location;
   if (where?.repo) {
@@ -579,7 +595,7 @@ function treePlacement(row) {
   }
   return {
     group: { key: `collector:${row.collector}`, label: collectorLabel(row.collector), icon: 'session' },
-    folders: [row.session_title ?? t('tree.untitledTask')],
+    folders: [sessionLabel(row)],
     folderIcon: 'session',
   };
 }
@@ -653,7 +669,9 @@ function placeOf(row) {
   const where = row.location;
   if (where?.repo) return { key: `repo:${where.repo}`, label: where.repo, icon: 'repo' };
   if (where) return { key: 'elsewhere', label: t('tree.elsewhere'), icon: 'folder' };
-  return { key: `task:${row.collector}:${row.session_title ?? ''}`, label: row.session_title ?? t('tree.untitledTask'), icon: 'session' };
+  // 묶기에서도 같은 규칙이다. 키는 제목이 없을 때 세션까지 내려가야 서로 안 합쳐진다.
+  const label = sessionLabel(row);
+  return { key: `task:${row.collector}:${row.session_title || row.session_ref || label}`, label, icon: 'session' };
 }
 
 function buildPivotTree(rows) {
@@ -1363,7 +1381,8 @@ const kbd = (key) => el('kbd', {}, key);
 // 분포 한 칸에 보일 줄 수. 나머지는 탐색기 필터에 있다.
 const DIST_ROWS = 8;
 // 색은 개체를 따른다. 필터로 에이전트가 줄어도 남은 에이전트의 색과 쌓는 순서가 그대로다.
-const AGENT_ORDER = ['openai-codex', 'claude-code', 'ai-mesh', 'unknown'];
+// 색은 개체를 따른다. Cursor 는 중립 회색이다 — 검증한 세 색에 넷째를 끼우면 적색맹 간격이 좁아진다.
+const AGENT_ORDER = ['openai-codex', 'claude-code', 'ai-mesh', 'cursor', 'unknown'];
 const agentName = (provider) => (provider === 'unknown' ? t('agent.unknown') : PROVIDER_LABEL[provider] ?? provider);
 const TOOLTIP_OFFSET = 8;
 const CHART = { plot: 160, top: 10, axis: 22, left: 34, right: 6, maxBar: 18, gap: 2, radius: 4, tickCount: 4 };
