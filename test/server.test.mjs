@@ -266,3 +266,18 @@ describe('접힌 번들의 구성 파일을 연다', () => {
     expect((await get(`/artifact/${htmlId}/raw?path=${encodeURIComponent('note.md')}`)).status).toBe(404);
   });
 });
+
+describe('tailnet 의 다른 노드', () => {
+  test('output-mesh 가 도는 노드만 이웃으로 센다 — 켜져 있는 것만으로는 부족하다', async () => {
+    const { probe } = await import('../lib/peers.mjs');
+    expect(await probe({ name: 'self', url: base })).toMatchObject({ name: 'self', url: base });
+    // 답이 없거나 다른 것이 물고 있는 포트는 이웃이 아니다.
+    expect(await probe({ name: 'nope', url: 'https://nope.invalid' })).toBeNull();
+  });
+
+  test('tailnet 이 없으면 조용히 빈 목록이다 — 이 기능은 카탈로그의 조건이 아니다', async () => {
+    const found = await (await get('/api/peers')).json();
+    expect(Array.isArray(found.peers)).toBe(true);
+    expect(found).toHaveProperty('self');
+  });
+});
