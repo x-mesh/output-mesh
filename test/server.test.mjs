@@ -150,6 +150,14 @@ describe('API', () => {
     expect(facets.exts.map((e) => e.value)).not.toContain('swift');
   });
 
+  test('/api/facets 가 검색어도 받는다 — 결과는 1건인데 사이드바가 전체 건수를 광고하던 실패', async () => {
+    const q = encodeURIComponent('본문');
+    const facets = await (await get(`/api/facets?view=library&q=${q}`)).json();
+    const list = await (await get(`/api/search?view=library&q=${q}`)).json();
+    expect(facets.states.reduce((sum, row) => sum + row.n, 0)).toBe(list.total);
+    expect(facets.exts.map((e) => e.value)).toEqual(['md']);
+  });
+
   test('정적 파일은 캐시되지 않는다 — 편집한 UI 가 새로고침에 안 바뀌던 원인', async () => {
     const res = await get('/app.js');
     expect(res.headers.get('cache-control')).toBe('no-store');

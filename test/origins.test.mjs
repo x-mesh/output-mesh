@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { CatalogStore, repairCollector } from '../lib/store.mjs';
 import { ingestFile, reindexArtifact } from '../lib/collector.mjs';
-import { activity, facets, search, searchCount } from '../lib/search.mjs';
+import { activity, facets, search, searchCount, timeline } from '../lib/search.mjs';
 import { nfc } from '../lib/paths.mjs';
 
 let dir;
@@ -151,6 +151,13 @@ describe('활동', () => {
     const [session] = activity(store);
     expect(session.file_count).toBe(1);
     expect(session.files).toHaveLength(1);
+  });
+
+  test('저장된 제목이 도구가 끼워 넣은 문구면 활동 카드는 제목을 비운다', async () => {
+    await ingestFile(store, file, codex('cx-env', { sessionTitle: '<environment_context>' }));
+    await ingestFile(store, file, claude('cc-img', { sessionTitle: '[Image #1] 왜 연결이 안 되나?' }));
+    const titles = Object.fromEntries(activity(store).map((s) => [s.session_ref, s.session_title]));
+    expect(titles).toEqual({ 'cx-env': null, 'cc-img': '왜 연결이 안 되나?' });
   });
 
   test('두 수집기의 세션이 각각 활동 카드가 된다', async () => {
@@ -318,5 +325,51 @@ describe('대화 컬럼 마이그레이션', () => {
     const columns = store.db.query('PRAGMA table_info(artifact_origins)').all().map((c) => c.name);
     expect(columns).toContain('conversation_ref');
     expect(store.originsOf(a)).toHaveLength(1);
+  });
+});
+
+describe('git worktree 는 본 저장소로 접는다', () => {
+  const MAIN = '/w/term-mesh';
+  const WT = '/gk/worktree/term-mesh/feat/sync';
+
+  function artifact(absPath) {
+    const name = absPath.split('/').pop();
+    const id = store.insertArtifact({ pathKey: absPath, absPath, fileName: name, ext: 'md', sizeBytes: 1, contentHash: absPath, fileId: null, mtime: 1 });
+    store.upsertSearchDoc(id, { name, path: absPath, body: '본문', bodyState: 'indexed' });
+    return id;
+  }
+
+  beforeEach(() => {
+    store.recordOrigin(artifact(`${MAIN}/docs/plan.md`), codex('main-session', { workspace: MAIN, createdAt: 100 }));
+    store.recordOrigin(artifact(`${WT}/docs/plan.md`), claude('wt-session', { workspace: WT, createdAt: 200 }));
+    store.recordOrigin(artifact('/w/other/README.md'), codex('other-session', { workspace: '/w/other', createdAt: 300 }));
+    store.setWorkspaceRoot(MAIN, { top: MAIN, root: MAIN });
+    store.setWorkspaceRoot(WT, { top: WT, root: MAIN });
+  });
+
+  test('작업공간 패싯이 저장소 하나로 모인다 — term-mesh 가 네 줄로 갈라지던 실패', () => {
+    expect(facets(store, {}).workspaces).toEqual([{ value: MAIN, n: 2 }, { value: '/w/other', n: 1 }]);
+  });
+
+  test('저장소로 거르면 worktree 의 파일도 나오고, 건수는 패싯과 같다', () => {
+    const rows = search(store, '', { workspace: MAIN });
+    expect(rows.map((r) => r.abs_path).sort()).toEqual([`${MAIN}/docs/plan.md`, `${WT}/docs/plan.md`].sort());
+    expect(searchCount(store, '', { workspace: MAIN })).toBe(2);
+  });
+
+  test('아직 저장소를 찾지 않은 작업공간은 자기 자신으로 센다 — 조용히 사라지지 않는다', () => {
+    expect(search(store, '', { workspace: '/w/other' })).toHaveLength(1);
+  });
+
+  test('worktree 의 파일은 본 저장소 이름과 worktree 이름을 같이 갖는다', () => {
+    const byPath = Object.fromEntries(search(store, '').map((r) => [r.abs_path, r.location]));
+    expect(byPath[`${WT}/docs/plan.md`]).toEqual({ repo: 'term-mesh', dir: 'docs/', worktree: 'sync' });
+    expect(byPath[`${MAIN}/docs/plan.md`]).toEqual({ repo: 'term-mesh', dir: 'docs/' });
+  });
+
+  test('활동 보기와 그래프도 같은 기준으로 거른다', () => {
+    expect(activity(store, { workspace: MAIN }).map((s) => s.session_ref).sort()).toEqual(['main-session', 'wt-session']);
+    const total = timeline(store, '', { workspace: MAIN }, 'all', new Date(400 * 1000)).buckets.reduce((sum, b) => sum + Object.values(b.counts ?? {}).reduce((x, y) => x + y, 0), 0);
+    expect(total).toBe(2);
   });
 });

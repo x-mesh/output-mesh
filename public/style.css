@@ -15,6 +15,9 @@
   --accent-soft: #e4eefb;
   --on-accent: #ffffff;
   --on-accent-dim: rgba(255, 255, 255, .82);
+  /* 검색어가 맞은 곳. 본문 글자색과 7:1 이상, 선택 강조색 위에서는 밝은 막으로 바꾼다. */
+  --mark: #ffe58a;
+  --mark-on-accent: rgba(255, 255, 255, .28);
   --final: #1a7f37;
   --warn: #8a5d00;
   --danger: #b42318;
@@ -72,6 +75,7 @@
   --accent: #4c9aff;
   --accent-soft: #1d3452;
   --on-accent: #ffffff;
+  --mark: #6b5a16;
   --final: #4ac26b;
   --warn: #d4a72c;
   --danger: #ff6b5e;
@@ -128,6 +132,8 @@ button.link {
   color: var(--accent); font-size: var(--text-xs);
 }
 button.link:hover { background: none; text-decoration: underline; }
+/* 상단의 수집 오류 표시. button.link 의 강조색이 .danger 를 이겨서 오류가 링크처럼 파랗게 보였다. */
+button.link.danger { color: var(--danger); }
 button.quiet-link { color: var(--text-dim); }
 .icon-button {
   display: inline-grid; place-items: center;
@@ -209,6 +215,15 @@ kbd {
   background: var(--bg-side);
   border-right: 1px solid var(--border);
 }
+
+/* 활동 보기는 고른 파일이 없으면 화면 전체를 쓴다(app.js 의 updateWide). 같은 목록이 폭만 달라진다.
+   조작(기간 · 필터)은 제 폭을 지키고 타임라인만 넓어진다. */
+.layout[data-wide] { grid-template-columns: minmax(0, 1fr) 0 0; }
+.layout[data-wide] .content, .layout[data-wide] .resizer { display: none; }
+.layout[data-wide] .explorer { background: var(--bg); border-right: none; padding: var(--space-3) var(--space-5) 0; }
+.layout[data-wide] .explorer > :not(.tree) { width: 100%; max-width: var(--explorer-width, 340px); }
+.layout[data-wide] .explorer-search { display: none; }
+.layout[data-wide] .tree { max-width: 1180px; }
 
 .resizer { position: relative; z-index: var(--z-resizer); cursor: col-resize; }
 .resizer::before { content: ''; position: absolute; inset: 0 -3px; }
@@ -356,12 +371,17 @@ kbd {
 .file-prefix { color: var(--text-dim); white-space: nowrap; flex-shrink: 1; overflow: hidden; text-overflow: ellipsis; max-width: 45%; }
 .file-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .file-what { font-size: var(--text-xs); color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 검색 결과 줄에만 붙는다. 트리가 말해 주던 위치와, 본문에서 맞은 대목. */
+.file-where { display: flex; gap: 4px; min-width: 0; font-size: var(--text-xs); color: var(--text-dim); overflow: hidden; }
+.file-excerpt { margin-top: 2px; font-size: var(--text-xs); line-height: 1.45; color: var(--text-dim); overflow: hidden; overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+mark { background: var(--mark); color: var(--text); border-radius: 2px; }
 .file-when { margin-top: 2px; font-size: var(--text-xs); color: var(--text-dim); font-variant-numeric: tabular-nums; white-space: nowrap; }
 
 /* Finder 처럼 선택은 포커스가 트리에 있을 때만 강조색이 된다. 다른 곳을 보는 동안에는 회색으로 남는다. */
 .tree-item[aria-selected="true"] { background: var(--bg-selected); }
 .tree:focus-within .tree-item[aria-selected="true"] { background: var(--accent); color: var(--on-accent); }
-.tree:focus-within .tree-item[aria-selected="true"] :is(.file-what, .file-when, .file-prefix, .kind) { color: var(--on-accent-dim); }
+.tree:focus-within .tree-item[aria-selected="true"] :is(.file-what, .file-when, .file-prefix, .kind, .file-where, .where-repo, .file-excerpt) { color: var(--on-accent-dim); }
+.tree:focus-within .tree-item[aria-selected="true"] mark { background: var(--mark-on-accent); color: var(--on-accent); }
 .tree:focus-within .tree-item[aria-selected="true"] .badge { color: var(--on-accent); border-color: var(--on-accent-dim); }
 
 .tree .empty { padding: var(--space-6) var(--space-4); text-align: center; color: var(--text-dim); list-style: none; }
@@ -395,7 +415,8 @@ button.chip:hover { border-color: var(--accent); color: var(--accent); backgroun
 
 .where-repo { font-weight: 600; color: var(--text); white-space: nowrap; }
 .where-dir { font-family: var(--mono); font-size: var(--text-xs); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
-.where-repo + .where-dir::before { content: '· '; font-family: var(--font); }
+.where-worktree { white-space: nowrap; }
+.where-repo + .where-dir::before, .where-worktree + .where-dir::before { content: '· '; font-family: var(--font); }
 
 /* ── 본문 ─────────────────────────────────────────────────────────────── */
 
@@ -644,6 +665,11 @@ embed.preview-fill { height: 100%; }
 .session-file[aria-selected="true"] { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
 .session-file.final { border-color: var(--final); }
 .session-more { font-size: var(--text-xs); color: var(--text-dim); align-self: center; }
+/* 넓을 때는 누가 · 언제 · 어디서를 왼쪽 기둥에, 무엇을 시켰고 무엇을 썼는지를 오른쪽에 둔다. */
+.layout[data-wide] .session { display: grid; grid-template-columns: 240px minmax(0, 1fr); column-gap: var(--space-5); align-items: start; padding: var(--space-3) var(--space-2); }
+.layout[data-wide] .session-head { grid-row: 1 / span 2; }
+.layout[data-wide] .session-head .where-dir { max-width: none; }
+.layout[data-wide] .session-title { margin-top: 0; font-size: var(--text-md); }
 .tree[role="list"] .empty { padding: var(--space-6) var(--space-4); text-align: center; color: var(--text-dim); }
 
 /* ── 가져오기 대화상자 ───────────────────────────────────────────────── */

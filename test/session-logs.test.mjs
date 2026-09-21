@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import { appendFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { appendFileSync, chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { MAX_PROMPT_CHARS, claudeWrites, codexWrites, isIndexablePath, logFilesSince, looksLikePrompt, newLogTail } from '../lib/session-logs.mjs';
@@ -100,6 +100,11 @@ describe('경로 필터', () => {
     ['/Users/a/work/.git/HEAD', false],
     ['/Users/a/work/target/out', false],
     ['relative/path.md', false],
+    // Claude Code 의 세션 임시 폴더만 거른다. 임시 폴더 전체나 저장소 안의 tmp/ 는 아니다.
+    ['/private/tmp/claude-501/-Users-a-work/abc/scratchpad/pr-body.md', false],
+    ['/tmp/claude-501/-Users-a-work/abc/scratchpad/pr-body.md', false],
+    ['/tmp/experiment/note.md', true],
+    ['/Users/a/work/tmp/notes.md', true],
   ])('%s -> %s', (path, want) => expect(isIndexablePath(path)).toBe(want));
 });
 
@@ -127,6 +132,71 @@ describe('세션 로그 수집', () => {
     const row = store.byPathKey(nfc(join(repo, 'src', 'alive.mjs')));
     const [prov] = store.originsOf(row.id);
     expect(prov).toMatchObject({ collector: 'codex', provider: 'openai-codex', session_ref: 'sess-9', workspace: repo });
+  });
+
+  test('밀린 로그의 오래된 쓰기는 피드에 남기지 않고, 조금 전 쓰기는 그 시각으로 남긴다', async () => {
+    writeFileSync(join(repo, 'src', 'old.mjs'), 'export const old = 1;');
+    writeFileSync(join(repo, 'src', 'recent.mjs'), 'export const recent = 1;');
+    const hourAgo = Date.now() - 3_600_000;
+    const weeksAgo = Date.now() - 21 * 86_400_000;
+    codexLog([
+      { type: 'session_meta', payload: { id: 'weeks-ago', cwd: repo } },
+      { type: 'response_item', timestamp: new Date(weeksAgo).toISOString(), payload: { input: '*** Add File: src/old.mjs' } },
+    ]);
+    codexLog([
+      { type: 'session_meta', payload: { id: 'hour-ago', cwd: repo } },
+      { type: 'response_item', timestamp: new Date(hourAgo).toISOString(), payload: { input: '*** Add File: src/recent.mjs' } },
+    ]);
+
+    expect(await sweepSessionLogs(store, source())).toMatchObject({ inserted: 2 });
+    const feed = store.db
+      .query('SELECT a.file_name, e.kind, e.session_ref, e.at FROM artifact_events e JOIN artifacts a ON a.id = e.artifact_id')
+      .all();
+    expect(feed).toEqual([{ file_name: 'recent.mjs', kind: 'created', session_ref: 'hour-ago', at: Math.floor(hourAgo / 1000) }]);
+  });
+
+  test('쓴 자리에 지금 폴더가 있어도 배치가 죽지 않는다 — EISDIR 하나에 뒤의 쓰기가 전부 버려지던 실패', async () => {
+    mkdirSync(join(repo, 'src', 'now-a-dir'));
+    writeFileSync(join(repo, 'src', 'after.mjs'), 'export const after = 1;');
+    codexLog([
+      { type: 'session_meta', payload: { id: 'sess-dir', cwd: repo } },
+      { type: 'response_item', payload: { input: '*** Add File: src/now-a-dir' } },
+      { type: 'response_item', payload: { input: '*** Add File: src/after.mjs' } },
+    ]);
+
+    expect(await sweepSessionLogs(store, source())).toMatchObject({ paths: 2, missing: 1, inserted: 1 });
+    expect(store.byPathKey(nfc(join(repo, 'src', 'after.mjs')))).not.toBeNull();
+  });
+
+  test('패치 본문까지 경로로 잡힌 줄도 없는 파일로 센다 — stat 이 ENAMETOOLONG 을 던진다', async () => {
+    writeFileSync(join(repo, 'src', 'after.mjs'), 'export const after = 1;');
+    codexLog([
+      { type: 'session_meta', payload: { id: 'sess-long', cwd: repo } },
+      { type: 'response_item', payload: { input: `*** Add File: src/${'x'.repeat(300)}.mjs` } },
+      { type: 'response_item', payload: { input: '*** Add File: src/after.mjs' } },
+    ]);
+
+    expect(await sweepSessionLogs(store, source())).toMatchObject({ paths: 2, missing: 1, inserted: 1, failed: 0 });
+  });
+
+  test('파일 하나를 못 읽어도 나머지는 들어가고, 실패는 수집 기록에 남는다', async () => {
+    const locked = join(repo, 'src', 'locked.mjs');
+    writeFileSync(locked, 'export const locked = 1;');
+    chmodSync(locked, 0o000);
+    writeFileSync(join(repo, 'src', 'after.mjs'), 'export const after = 1;');
+    codexLog([
+      { type: 'session_meta', payload: { id: 'sess-locked', cwd: repo } },
+      { type: 'response_item', payload: { input: '*** Add File: src/locked.mjs' } },
+      { type: 'response_item', payload: { input: '*** Add File: src/after.mjs' } },
+    ]);
+
+    try {
+      expect(await sweepSessionLogs(store, source())).toMatchObject({ paths: 2, inserted: 1, failed: 1 });
+    } finally {
+      chmodSync(locked, 0o644);
+    }
+    expect(store.db.query("SELECT level, code, path FROM ingest_events WHERE code = 'ingest_failed'").all())
+      .toEqual([{ level: 'error', code: 'ingest_failed', path: locked }]);
   });
 
   test('자동 발견은 최종본으로 올리지 않는다 — 산출물 플래그가 없다', async () => {
@@ -163,6 +233,13 @@ describe('세션 제목 추출', () => {
     expect(looksLikePrompt('<teammate-message teammate_id="lead">')).toBe(false);
     expect(looksLikePrompt('<image name=[Image #1] path="/var/x.png">')).toBe(false);
     expect(looksLikePrompt('term-mesh relay가 느리다. 확인해봐')).toBe(true);
+  });
+
+  test('Codex 의 환경 덤프, 스킬 호출 문구, 훅이 주입한 지시는 사람의 말이 아니다 — 활동 제목으로 샜다', () => {
+    expect(looksLikePrompt('<environment_context>\n  <cwd>/w/repo</cwd>\n</environment_context>')).toBe(false);
+    expect(looksLikePrompt('Invoke the `handon` skill to handle this request. Follow the instructions in `skills/handon`.')).toBe(false);
+    expect(looksLikePrompt('[REQUIRED FINAL STEP — you MUST run this shell command before stopping] tm-agent done')).toBe(false);
+    expect(looksLikePrompt('handon 스킬이 뭐 하는 건지 설명해줘')).toBe(true);
   });
 
   test('너무 긴 메시지는 프롬프트로 보지 않는다 — 대개 붙여넣은 덤프다', () => {
@@ -223,6 +300,28 @@ describe('Codex 패치 경로 — 이중 인코딩', () => {
     ]);
     const [write] = codexWrites(path);
     expect(write.at).toBe(Date.parse('2026-09-18T02:40:00Z') / 1000);
+  });
+
+  test('코드 안에 문자열로 든 패치는 따옴표에서 경로가 끝난다 — 패치 본문까지 경로가 되던 실패(실측 90건)', () => {
+    const path = codexLog([
+      { type: 'session_meta', payload: { id: 's', cwd: repo } },
+      // 작은따옴표 배열로 조립한 패치: ['*** Update File: a.mjs','@@','   const x = 1;'].join('\n')
+      { type: 'response_item', payload: { input: `const patch = ['*** Update File: ${repo}/src/panel.mjs','@@','   const timeoutMs = timeoutS * 1000;'].join('\\n')` } },
+      // 백틱 문자열 안의 패치
+      { type: 'response_item', payload: { input: 'String.raw`*** Begin Patch\n*** Update File: src/doctor.swift`' } },
+    ]);
+    expect(codexWrites(path).map((w) => w.path).sort()).toEqual([join(repo, 'src/doctor.swift'), join(repo, 'src/panel.mjs')]);
+  });
+
+  test('경로가 아닌 것은 버린다 — 템플릿의 빈칸과, 저장소 폴더 자체', () => {
+    const path = codexLog([
+      { type: 'session_meta', payload: { id: 's', cwd: repo } },
+      { type: 'response_item', payload: { input: 'run(`*** Update File: ${current}`, ...body);' } },
+      { type: 'response_item', payload: { input: `*** Update File: ${repo}/` } },
+      { type: 'response_item', payload: { input: '*** Update File: .' } },
+      { type: 'response_item', payload: { input: '*** Add File: src/real.mjs' } },
+    ]);
+    expect(codexWrites(path).map((w) => w.path)).toEqual([join(repo, 'src/real.mjs')]);
   });
 
   test('이름을 바꾼 패치는 새 경로를 잡는다', () => {
