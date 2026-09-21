@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { clearRun, isAlive, readRun, runFileFor, writeRun } from '../lib/running.mjs';
+import { acquireWriterLock, clearRun, isAlive, readRun, releaseWriterLock, runFileFor, writerLockFileFor, writeRun } from '../lib/running.mjs';
 
 let dir;
 let db;
@@ -43,5 +43,26 @@ describe('도는 인스턴스 기록', () => {
   test('닿지 않는 pid 는 죽은 것으로 본다', () => {
     expect(isAlive(process.pid)).toBe(true);
     expect(isAlive(999_999)).toBe(false);
+  });
+
+  test('writer lock은 같은 catalog의 명령을 직렬화한다', () => {
+    const lock = acquireWriterLock(db, { command: 'sweep' });
+    expect(writerLockFileFor(db)).toBe(db + '.writer.lock');
+    expect(() => acquireWriterLock(db, { alive: (pid) => pid === process.pid })).toThrow(/Catalog is locked/);
+    expect(releaseWriterLock(lock)).toBe(true);
+    expect(existsSync(writerLockFileFor(db))).toBe(false);
+  });
+
+  test('죽은 writer lock은 회수한다', () => {
+    writeFileSync(writerLockFileFor(db), JSON.stringify({ pid: 999_999, command: 'sweep', token: 'stale' }));
+    const lock = acquireWriterLock(db, { alive: () => false });
+    expect(releaseWriterLock(lock)).toBe(true);
+  });
+
+  test('다른 소유자의 writer lock은 지우지 않는다', () => {
+    const lock = acquireWriterLock(db);
+    expect(releaseWriterLock({ path: lock.path, token: 'other' })).toBe(false);
+    expect(existsSync(lock.path)).toBe(true);
+    expect(releaseWriterLock(lock)).toBe(true);
   });
 });
