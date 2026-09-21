@@ -278,6 +278,10 @@ describe('tailnet 의 다른 노드', () => {
   test('tailnet 이 없으면 조용히 빈 목록이다 — 이 기능은 카탈로그의 조건이 아니다', async () => {
     const found = await (await get('/api/peers')).json();
     expect(Array.isArray(found.peers)).toBe(true);
+    expect(Array.isArray(found.nodes)).toBe(true);
     expect(found).toHaveProperty('self');
+    // 이어진 것만 전환기에 쓰지만, 못 이어진 기기도 상태와 함께 남는다.
+    for (const node of found.nodes) expect(['self', 'connected', 'silent', 'offline']).toContain(node.status);
+    expect(found.peers.every((node) => node.status === 'connected')).toBe(true);
   });
 });
