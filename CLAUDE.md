@@ -40,7 +40,7 @@ bun bin/output-mesh.mjs start|stop|restart|status|uninstall
 | `lib/worktrees.mjs` | 작업공간이 어느 저장소의 것인가. `.git` 포인터만 읽는다 |
 | `lib/server.mjs` | HTTP API + 아티팩트 서빙 |
 | `public/` | 바닐라 ESM UI |
-| `public/vendor/` | 핀 고정한 브라우저 라이브러리 (marked.js, gridstack, drawio viewer) |
+| `public/vendor/` | 핀 고정한 브라우저 라이브러리 (marked.js, gridstack, drawio viewer, shj) |
 
 ### Key design decisions
 
@@ -110,6 +110,13 @@ bun bin/output-mesh.mjs start|stop|restart|status|uninstall
 - **세션이 없는 출처는 에이전트 활동이 아니다.** `session_ref = ''` 인 출처(작업공간·가져오기)는 사건 `source` 가 `disk` 이고, 타임라인과 24시간 작업 수에서 빠진다.
 
 **피드가 숨긴 것은 건수로 남긴다.** "방금 일어난 일"은 라이브러리 규칙을 따라 코드·기타를 뺀다. 빼기만 하면 코드를 고쳤는데 피드가 조용해 수집이 멈춘 것처럼 보이므로, `recentChanges` 가 보인 가장 오래된 변경 이후의 숨긴 건수를 `hidden` 으로 같이 준다.
+
+**코드 색칠은 `tokenize` 로 한다.** `@speed-highlight/core`(2.1.0, CC0-1.0, `public/vendor/shj/`, 30KB)가 주는 `highlightElement` 는 `innerHTML` 로 넣는데, 코드 미리보기는 에이전트가 만든 파일을 **우리 문서 안에서** 그리는 자리다(마크다운·아티팩트 HTML 과 달리 iframe 이 아니다). 그래서 문자열을 HTML 로 되돌리지 않고 토큰마다 노드를 만든다 — 덤으로 검색어 표시(`<mark>`)를 토큰 안에 그대로 섞을 수 있다(실측 11개 모두 토큰 안).
+
+- **언어는 지연 적재다.** `index.js` 가 `import('./languages/<lang>.js')` 로 부르므로 통짜 번들이 아니라 폴더째 넣는다. 코드 파일을 처음 열 때만 받는다.
+- **큰 파일은 접는다**(`MAX_HIGHLIGHT_BYTES`). 2MB 로그를 토큰으로 쪼개면 메인 스레드가 멈추고, 그런 파일에서 색이 주는 값도 없다.
+- **테마를 들여오지 않는다.** 빌려온 팔레트는 라이트·다크 두 벌을 따로 관리해야 하고 본문 글자색과의 대비를 아무도 보증하지 않는다. `--syn-*` 토큰 다섯 개로 이 화면의 색만 쓴다.
+- **색칠이 실패해도 글자는 보인다.** 언어를 못 받았거나 토큰화가 터지면 지금까지처럼 평범한 `<pre>` 로 떨어진다.
 
 **여러 기기는 합치지 않고 잇는다.** 노드마다 자기 카탈로그를 `127.0.0.1` 에 띄우고 `tailscale serve` 로 tailnet 에만 낸다 — **바인딩 불변식을 건드리지 않고** 인증과 TLS 를 tailnet 이 맡는다. 상단 바의 전환기는 링크라, 고르면 그 노드의 UI 로 통째로 간다. 합쳐 보이지 않는 이유는 둘이다: 원본이 그 기기에 남아 미리보기와 `Finder에서 보기`가 죽고, bm25 점수는 SQLite 인덱스마다 기준이 달라 섞으면 순서가 틀린다.
 
