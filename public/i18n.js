@@ -23,6 +23,7 @@
   const MESSAGES = {
     ko: {
       'brand.home': '개요로 가기',
+      'nodes.aria': '노드', 'nodes.here': '이 기기', 'nodes.open': ({ name }) => `${name} 의 카탈로그 열기`,
       'aria.modes': '보기',
       'mode.library': '라이브러리',
       'mode.activity': '활동',
@@ -197,6 +198,7 @@
 
     en: {
       'brand.home': 'Go to overview',
+      'nodes.aria': 'Nodes', 'nodes.here': 'this machine', 'nodes.open': ({ name }) => `Open the catalog on ${name}`,
       'aria.modes': 'View',
       'mode.library': 'Library',
       'mode.activity': 'Activity',

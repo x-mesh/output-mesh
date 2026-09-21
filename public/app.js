@@ -2547,6 +2547,27 @@ setInterval(() => {
 
 $('home').addEventListener('click', () => goHome());
 
+// ── 노드 ───────────────────────────────────────────────────────────────
+/**
+ * tailnet 의 다른 기기에서도 같은 카탈로그가 돈다. 산출물은 그 기기에 남으므로 합쳐 보이지 않고
+ * 화면을 통째로 그 기기로 옮긴다 — 같은 오리진이라 목록도 미리보기도 그대로 된다.
+ * 혼자 쓰는 기기(tailnet 없음, 이웃 없음)에서는 아예 보이지 않는다.
+ */
+async function renderNodes() {
+  const found = await api('/api/peers').catch(() => null);
+  if (!found || found.peers.length === 0) return;
+  const box = $('nodes');
+  box.hidden = false;
+  box.setAttribute('aria-label', t('nodes.aria'));
+  box.replaceChildren(
+    el('span', { className: 'node-here', title: t('nodes.here') }, found.self ?? t('nodes.here')),
+    ...found.peers.map((peer) => el('a', {
+      className: 'node-peer',
+      href: peer.url,
+      title: t('nodes.open', { name: peer.name }),
+    }, peer.name)));
+}
+
 // ── 언어 ───────────────────────────────────────────────────────────────
 // 이름은 각 언어가 자기를 부르는 말이라 번역하지 않는다.
 const LANG_NAME = { ko: '한국어', en: 'English' };
@@ -2571,6 +2592,7 @@ function renderLang() {
 document.addEventListener('langchange', () => {
   renderLang();
   renderPeriod();
+  void renderNodes();
   renderGroupBy();
   renderThemeButton();
   renderVersion();
@@ -2582,6 +2604,7 @@ document.addEventListener('langchange', () => {
 });
 renderLang();
 renderPeriod();
+void renderNodes();
 
 // 버전은 바닥줄에 작게 둔다. 자주 보는 정보가 아니라 버그를 알리거나 새 버전이 받아졌는지 볼 때 쓴다.
 let version = null;
