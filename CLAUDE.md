@@ -23,6 +23,7 @@ bun bin/output-mesh.mjs doctor          # 상태 점검
 | `lib/paths.mjs` | 경로 상수, NFC 정규화 |
 | `lib/scanner.mjs` | 순수 경로 분류. 파일시스템을 만지지 않는다 |
 | `lib/aside-reader.mjs` | Aside `state.db` 읽기 전용 |
+| `lib/cursor-reader.mjs` | Cursor `state.vscdb` 읽기 전용. composer 가 고친 파일 |
 | `lib/session-logs.mjs` | Codex rollout · Claude Code transcript 에서 쓴 경로 수확 |
 | `lib/collector.mjs` | 스윕 · 보강 · 색인 |
 | `lib/store.mjs` + `schema.sql` | SQLite 인덱스 |
@@ -57,6 +58,13 @@ bun bin/output-mesh.mjs doctor          # 상태 점검
 **세션 로그 배치는 세션까지 키로 잡는다.** `sweepSessionLogs` 의 `discovered` 는 `(sessionRef, path)` 가 키다. 경로만으로 잡으면 mtime 순으로 읽는 배치 안에서 같은 파일을 건드린 세션들이 가장 새 것만 남고 조용히 버려진다 — 1:N 스키마로도 되살릴 수 없는 손실이다. 전수 재파싱 뒤 `counts().multiOrigin` 이 0 이면 이게 다시 깨진 것이다.
 
 **자라는 로그는 이어 읽는다.** mtime 커서는 "어느 로그가 바뀌었나"만 답한다. 에이전트가 도는 동안 그 로그는 몇 초마다 자라는데, 통째로 다시 읽으면 31MB 대화 로그 하나에 수집마다 수십 MB 를 할당해 서버가 30초에 66MB 씩 불었다(3.9GB 까지). 워처가 로그마다 읽은 바이트 위치와 앞부분에서 알아낸 세션 정보(`newLogTail`)를 들고 있어서 새로 붙은 줄만 읽는다. 끝에 줄바꿈 없이 남은 조각은 쓰는 중일 수 있어 JSON 으로 완성됐을 때만 받는다. 파일이 줄거나 inode 가 바뀌면 처음부터 읽는다. JSON.parse 전에 필요한 줄(세션 정보·사람 발화·쓰기)만 문자열로 거른다 — 첫 실행 4.2GB 파싱이 7.8초 → 4.3초, 최대 메모리 2.9GB → 1.1GB 가 됐고 결과는 해시까지 같다.
+
+**Cursor 는 composer 한 자리에서만 읽는다.** Cursor 는 로그 파일을 남기지 않는다. 고친 파일이 남는 곳을 셋 다 열어 봤고 쓸 수 있는 자리는 `state.vscdb` 의 `composerData:<uuid>` 하나였다(실측 48행 중 파일 기록 10건, 경로 79개). `originalFileStates` 가 고친 파일, `newlyCreatedFiles` 가 새로 만든 파일이고 `createdAt`·`lastUpdatedAt` 이 시각이다.
+
+- **버린 두 자리.** 세션별 `~/.cursor/chats/<작업공간>/<세션>/store.db` 는 558개를 다 열어도 도구가 전부 읽기였다(Read 1150 · Grep 676 · Shell 290). 전역 `agentKv:blob:<sha256>` 에는 쓰기가 있지만(ApplyPatch 69 · Write 2) 키가 내용 해시라 어느 세션의 언제인지를 붙일 수 없다.
+- **커서는 밀리초다.** `lastUpdatedAt` 을 그대로 쓴다. 초로 줄이면 같은 밀리초의 대화가 가려진다.
+- **작업공간은 되짚어 채운다.** Cursor 가 cwd 를 주지 않아서 파일이 놓인 곳에서 `resolveWorkspace` 로 저장소를 찾는다. 추론이지만 이래야 위치가 실제 경로가 아니라 저장소 이름으로 보이고 worktree 도 본 저장소로 모인다.
+- **색은 중립 회색이다.** 검증한 세 에이전트 색 사이에 넷째를 끼우면 적색맹 인접 ΔE 가 좁아진다.
 
 **Codex·Claude Code 는 산출물이 아니라 출처를 준다.** 둘 다 산출물 레코드가 없지만 세션 로그에 쓴 경로가 남는다 — Codex 는 `apply_patch` 본문의 `*** Add/Update File:` 마커(1,236개 중 321개), Claude Code 는 `tool_use` 블록의 `file_path`. 그 경로의 파일은 이미 저장소 안에 있으므로 옮기지 않고 출처만 붙인다. Aside 가 주지 못하는 `workspace` 가 여기서 채워진다. 자동 발견분은 산출물 플래그가 없으므로 절대 `final` 로 올리지 않는다.
 
