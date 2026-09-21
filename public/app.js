@@ -2589,7 +2589,9 @@ async function renderNodes() {
   const box = $('nodes');
   box.hidden = false;
   box.setAttribute('aria-label', t('nodes.aria'));
-  box.replaceChildren(
+  // replaceChildren 은 el() 과 달리 거짓 자식을 걸러 주지 않는다. 그대로 넘기면 닫힌 패널이
+  // 문자열 "false" 로 그려진다 — 실제로 상단 바에 그렇게 떴다.
+  box.replaceChildren(...keep([
     el('button', {
       type: 'button',
       className: 'node-here',
@@ -2605,7 +2607,8 @@ async function renderNodes() {
       href: peer.url,
       title: t('nodes.open', { name: peer.name }),
     }, peer.name)),
-    nodesOpen && nodesPanel(found));
+    nodesOpen && nodesPanel(found),
+  ]));
 }
 
 // ── 언어 ───────────────────────────────────────────────────────────────
