@@ -1,4 +1,7 @@
 #!/usr/bin/env bun
+import { existsSync, mkdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { CatalogStore } from '../lib/store.mjs';
 import { Watcher } from '../lib/watcher.mjs';
 import { asideReaders, sourcesStatus } from '../lib/sources.mjs';
@@ -9,6 +12,7 @@ import { surveyCoverage, REASON_LABEL } from '../lib/coverage.mjs';
 import { CATALOG_DB, COMPACT_HINT_RATIO, DEFAULT_HOST, DEFAULT_PORT, INGEST_ERROR_VISIBLE_S, MEGABYTE } from '../lib/paths.mjs';
 import { collectProgressText, count, createSpinner } from '../lib/spinner.mjs';
 import { NAME, VERSION } from '../lib/version.mjs';
+import { looksEphemeral, serviceCommand, servicePlan } from '../lib/service.mjs';
 
 const args = process.argv.slice(2);
 const command = args[0] ?? 'serve';
@@ -53,6 +57,54 @@ function startupLines(store, readers, port) {
 
 const mb = (bytes) => `${(bytes / MEGABYTE).toFixed(1)}MB`;
 
+async function run([program, ...rest]) {
+  const proc = Bun.spawn([program, ...rest], { stdout: 'inherit', stderr: 'inherit' });
+  return await proc.exited;
+}
+
+/**
+ * 상시 실행은 운영체제에 맡긴다. 여기서는 설정 파일을 쓰고 그 위의 명령을 부를 뿐이라,
+ * 실패하면 운영체제가 낸 말이 그대로 보인다 — 우리가 다시 옮겨 적지 않는다.
+ */
+async function runService(verb) {
+  const script = realpathSync(fileURLToPath(import.meta.url));
+  const plan = servicePlan({ command: serviceCommand({ script, args: args.slice(1) }) });
+  if (!plan) {
+    console.error(`No service manager for ${process.platform}. Run \`${NAME} serve\` yourself.`);
+    process.exit(2);
+  }
+
+  if (verb === 'install') {
+    if (looksEphemeral(script)) {
+      console.error(`Refusing to install from a temporary path:\n  ${script}\n`
+        + `That path will not exist at the next boot. Install it first:\n  bun install -g ${NAME}`);
+      process.exit(2);
+    }
+    mkdirSync(dirname(plan.path), { recursive: true });
+    writeFileSync(plan.path, plan.contents);
+    console.log(`Wrote ${plan.path}`);
+    for (const step of plan.load) await run(step);
+    console.log(`Started. Logs: ${plan.log}`);
+    return;
+  }
+
+  if (verb === 'uninstall') {
+    for (const step of plan.unload) await run(step);
+    if (existsSync(plan.path)) {
+      rmSync(plan.path);
+      console.log(`Removed ${plan.path}`);
+    }
+    return;
+  }
+
+  if (!existsSync(plan.path)) {
+    console.error(`Not installed. Run \`${NAME} install\` first.`);
+    process.exit(2);
+  }
+  const steps = { start: plan.load, stop: plan.unload, restart: plan.restart, status: plan.status }[verb];
+  for (const step of steps) await run(step);
+}
+
 const store = new CatalogStore(flag('--db', CATALOG_DB));
 const readers = asideReaders();
 
@@ -91,6 +143,18 @@ switch (command) {
     break;
   }
 
+  case 'install':
+  case 'uninstall':
+  case 'start':
+  case 'stop':
+  case 'restart':
+  case 'status': {
+    // 카탈로그를 건드리지 않는 명령이다. 서비스가 이미 물고 있는 DB 를 두 번 열지 않는다.
+    store.close();
+    await runService(command);
+    break;
+  }
+
   case 'sweep': {
     // 빈 카탈로그의 첫 수집은 모든 파일이 "새로 생김"이다. 변경 기록을 그걸로 채우지 않는다.
     store.quietEvents = store.isEmpty();
@@ -104,7 +168,7 @@ switch (command) {
   case 'import': {
     const target = args[1];
     if (!target) {
-      console.error('사용법: output-mesh import <path>');
+      console.error(`Usage: ${NAME} import <path>`);
       process.exit(2);
     }
     console.log(await importPath(store, target));
@@ -164,6 +228,16 @@ switch (command) {
   }
 
   default:
-    console.error(`알 수 없는 명령: ${command}\n사용법: output-mesh [serve|sweep|import <path>|coverage|doctor|compact|--version] [--port N] [--db PATH]`);
+    console.error(`Unknown command: ${command}\n`
+      + `Usage: ${NAME} <command> [--port N] [--db PATH]\n\n`
+      + '  serve      run the catalog (default)\n'
+      + '  sweep      collect once and exit\n'
+      + '  import     add a file or folder by hand\n'
+      + '  coverage   what was collected and what was left out\n'
+      + '  doctor     health check\n'
+      + '  compact    reclaim free pages in the database\n\n'
+      + '  install    run it as a background service, now and at login\n'
+      + '  start · stop · restart · status\n'
+      + '  uninstall  remove the service');
     process.exit(2);
 }
