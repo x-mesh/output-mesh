@@ -6,8 +6,8 @@ import { collectOnce } from '../lib/collector.mjs';
 import { importPath } from '../lib/importer.mjs';
 import { startServer } from '../lib/server.mjs';
 import { surveyCoverage, REASON_LABEL } from '../lib/coverage.mjs';
-import { CATALOG_DB, DEFAULT_HOST, DEFAULT_PORT, MEGABYTE } from '../lib/paths.mjs';
-import { collectProgressText, createSpinner } from '../lib/spinner.mjs';
+import { CATALOG_DB, COMPACT_HINT_RATIO, DEFAULT_HOST, DEFAULT_PORT, INGEST_ERROR_VISIBLE_S, MEGABYTE } from '../lib/paths.mjs';
+import { collectProgressText, count, createSpinner } from '../lib/spinner.mjs';
 import { NAME, VERSION } from '../lib/version.mjs';
 
 const args = process.argv.slice(2);
@@ -24,6 +24,35 @@ function flag(name, fallback) {
   return at >= 0 && args[at + 1] !== undefined ? args[at + 1] : fallback;
 }
 
+/**
+ * 시작 화면. 무엇이 모였고 무엇을 하면 되는지만 적는다 — 주소를 눈에 띄게 두는 것이 이 화면의
+ * 일이다. 볼 것이 있을 때만 줄을 늘린다(빠진 수집기, 회수할 빈 자리, 지난 오류).
+ */
+function startupLines(store, readers, port) {
+  const counts = store.counts();
+  const storage = store.storage();
+  const sources = sourcesStatus(store, readers);
+  const missing = sources.filter((source) => !source.available).map((source) => source.collector);
+  // 지난 오류까지 붙들지 않는다. 화면이 쓰는 것과 같은 창(INGEST_ERROR_VISIBLE_S)으로 자른다.
+  const since = Math.floor(Date.now() / 1000) - INGEST_ERROR_VISIBLE_S;
+  const errors = store.recentIngestEvents().filter((event) => event.level === 'error' && event.at >= since).length;
+
+  const lines = [
+    `${NAME} ${VERSION}`,
+    '',
+    `  Catalog   ${count(counts.artifacts)} artifacts · ${count(counts.final)} final · ${count(counts.origins)} origins`,
+  ];
+  if (missing.length > 0) lines.push(`  Missing   ${missing.join(', ')} — not installed on this machine`);
+  if (storage.freeRatio >= COMPACT_HINT_RATIO) {
+    lines.push(`  Storage   ${mb(storage.freeBytes)} of ${mb(storage.bytes)} is reclaimable — run \`${NAME} compact\``);
+  }
+  if (errors > 0) lines.push(`  Errors    ${count(errors)} collect errors in the last hour — run \`${NAME} doctor\``);
+  lines.push('', `  Open      http://${DEFAULT_HOST}:${port}`, '  Stop      Ctrl-C', '');
+  return lines;
+}
+
+const mb = (bytes) => `${(bytes / MEGABYTE).toFixed(1)}MB`;
+
 const store = new CatalogStore(flag('--db', CATALOG_DB));
 const readers = asideReaders();
 
@@ -33,15 +62,27 @@ switch (command) {
     const watcher = new Watcher(store, readers);
     const spinner = createSpinner();
     if (store.counts().artifacts === 0) {
-      spinner.note('처음 실행이라 에이전트 로그를 모두 읽습니다. 로그 양에 따라 몇 분 걸릴 수 있습니다.');
+      spinner.note('First run: reading every agent log. This can take a few minutes.');
     }
     const started = performance.now();
-    spinner.start('수집 준비 중');
+    spinner.start('Preparing to collect');
     await watcher.start({ onProgress: (progress) => spinner.update(...collectProgressText(progress)) });
     const seconds = ((performance.now() - started) / 1000).toFixed(1);
-    spinner.stop(`수집 완료  ${store.counts().artifacts.toLocaleString('ko-KR')}개 · ${seconds}초`);
-    await startServer({ store, watcher, readers }, { port, host: DEFAULT_HOST });
-    console.log(`${NAME} ${VERSION}  http://${DEFAULT_HOST}:${port}  (${store.counts().artifacts}개 수집됨)`);
+    spinner.stop(`Collected in ${seconds}s`);
+    try {
+      await startServer({ store, watcher, readers }, { port, host: DEFAULT_HOST });
+    } catch (error) {
+      // 다른 포트로 몰래 옮기지 않는다. 같은 카탈로그에 두 서버가 붙으면 쓰기가 서로 막혀
+      // 수집이 'database is locked' 로 죽는다 — 실제로 그렇게 기록됐다.
+      console.error(error.code === 'EADDRINUSE'
+        ? `Port ${port} is already in use. Stop the other instance, or pick another port:\n  ${NAME} serve --port ${port + 1}`
+        : `Could not start the server: ${error.message}`);
+      watcher.stop();
+      store.close();
+      process.exit(1);
+    }
+    // 서버가 뜬 다음에만 주소를 적는다. 먼저 적으면 뜨지 못했을 때 죽은 주소를 권하게 된다.
+    for (const line of startupLines(store, readers, port)) console.log(line);
     process.on('SIGINT', () => {
       watcher.stop();
       store.close();
