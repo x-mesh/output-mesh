@@ -25,6 +25,12 @@ lives in `package.json`; `output-mesh --version` and the explorer footer show it
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-09-21
+
+### Added
+
+- 못 이어진 노드도 이유와 함께 보인다
+
 ## [0.4.1] - 2026-09-21
 
 ### Fixed
