@@ -25,6 +25,8 @@ lives in `package.json`; `output-mesh --version` and the explorer footer show it
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-09-21
+
 ### Changed
 
 - published to npm: run it with `bunx output-mesh`
