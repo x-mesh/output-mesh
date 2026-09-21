@@ -129,3 +129,19 @@ describe('수집 진행 보고', () => {
     expect(events.length).toBe(firstRun);
   });
 });
+
+describe('닫힌 출력', () => {
+  test('파이프가 끊겨도 수집을 죽이지 않는다 — EPIPE 가 sweep_failed 로 올라오던 실패', () => {
+    const broken = {
+      isTTY: true,
+      write() {
+        throw Object.assign(new Error('EPIPE: broken pipe, write'), { code: 'EPIPE' });
+      },
+    };
+    const spinner = createSpinner(broken);
+    expect(() => spinner.note('안내')).not.toThrow();
+    expect(() => spinner.start('수집 준비 중')).not.toThrow();
+    expect(() => spinner.update('진행')).not.toThrow();
+    expect(() => spinner.stop()).not.toThrow();
+  });
+});
