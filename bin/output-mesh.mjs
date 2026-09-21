@@ -6,7 +6,7 @@ import { collectOnce } from '../lib/collector.mjs';
 import { importPath } from '../lib/importer.mjs';
 import { startServer } from '../lib/server.mjs';
 import { surveyCoverage, REASON_LABEL } from '../lib/coverage.mjs';
-import { CATALOG_DB, DEFAULT_HOST, DEFAULT_PORT } from '../lib/paths.mjs';
+import { CATALOG_DB, DEFAULT_HOST, DEFAULT_PORT, MEGABYTE } from '../lib/paths.mjs';
 import { collectProgressText, createSpinner } from '../lib/spinner.mjs';
 import { NAME, VERSION } from '../lib/version.mjs';
 
@@ -101,6 +101,7 @@ switch (command) {
       version: VERSION,
       catalogDb: store.db.filename,
       journalMode: store.journalMode(),
+      storage: store.storage(),
       fts5Trigram: fts5,
       ftsIntegrity: store.ftsIntegrityOk(),
       counts: store.counts(),
@@ -111,7 +112,17 @@ switch (command) {
     break;
   }
 
+  case 'compact': {
+    const started = Date.now();
+    const { before, after } = store.compact();
+    const mb = (bytes) => `${(bytes / MEGABYTE).toFixed(1)}MB`;
+    const seconds = ((Date.now() - started) / 1000).toFixed(1);
+    console.log(`${mb(before)} → ${mb(after)}  (${mb(before - after)} 회수 · ${seconds}초)`);
+    store.close();
+    break;
+  }
+
   default:
-    console.error(`알 수 없는 명령: ${command}\n사용법: output-mesh [serve|sweep|import <path>|coverage|doctor|--version] [--port N] [--db PATH]`);
+    console.error(`알 수 없는 명령: ${command}\n사용법: output-mesh [serve|sweep|import <path>|coverage|doctor|compact|--version] [--port N] [--db PATH]`);
     process.exit(2);
 }
