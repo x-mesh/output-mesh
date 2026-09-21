@@ -223,7 +223,7 @@ kbd {
 .layout[data-wide] .explorer { background: var(--bg); border-right: none; padding: var(--space-3) var(--space-5) 0; }
 .layout[data-wide] .explorer > :not(.tree) { width: 100%; max-width: var(--explorer-width, 340px); }
 .layout[data-wide] .explorer-search { display: none; }
-.layout[data-wide] .tree { max-width: 1180px; }
+.layout[data-wide] .tree { max-width: none; }
 
 .resizer { position: relative; z-index: var(--z-resizer); cursor: col-resize; }
 .resizer::before { content: ''; position: absolute; inset: 0 -3px; }
@@ -539,17 +539,77 @@ embed.preview-fill { height: 100%; }
 /* 그리드 칸은 기본으로 내용의 최소 폭 밑으로 줄지 않는다. 그래프 SVG 의 고정 폭이 칸을 붙잡아
    창을 줄여도 그래프가 다시 그려지지 않는다. */
 .dash { grid-template-columns: minmax(0, 1fr); }
-.dash > * { max-width: 1180px; min-width: 0; }
+/* 폭 상한을 두지 않는다. 위젯 격자에서는 각 위젯의 폭을 사용자가 정하므로, 글줄 길이를 위해
+   전체를 묶어 두면 오른쪽이 늘 비어 보인다. */
+.dash > * { min-width: 0; }
 .chart svg { max-width: 100%; height: auto; }
 /* 다시 받는 동안 앞 화면을 흐리게 들고 있는다. 뼈대 화면으로 깜빡이지 않는다. */
 .dash.refreshing { opacity: .55; }
+.dash-head { display: flex; align-items: flex-start; gap: var(--space-4); }
+.dash-title { flex: 1; min-width: 0; }
 .dash-head h2 { margin: 0; font-size: var(--text-xl); font-weight: 600; }
+/* 개요 구성. 카드도 드래그 손잡이도 없다 — 체크박스와 화살표 버튼뿐이다. */
+.dash-config { position: relative; font-size: var(--text-sm); }
+/* 펼칠 때 개요를 밀어내지 않게 겹쳐 띄운다. 조작은 잠깐이고 아래 내용이 자리를 지켜야 한다. */
+.dash-config-body {
+  position: absolute; right: 0; z-index: var(--z-sticky); min-width: 208px;
+  margin-top: var(--space-2); padding: var(--space-3);
+  background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, .12);
+}
+.dash-config summary { cursor: pointer; color: var(--accent); font-size: var(--text-xs); list-style: none; white-space: nowrap; }
+.dash-config summary::-webkit-details-marker { display: none; }
+.dash-config ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.dash-config li { display: flex; align-items: center; gap: var(--space-1); }
+.dash-config li label { display: flex; align-items: center; gap: 6px; flex: 1; min-width: 0; }
+.dash-config .icon-button { width: 22px; min-height: 22px; }
+.dash-config-body > button.link { margin-top: var(--space-3); }
+.dash-off { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-2); }
+
+/* 블록 재배치. 손잡이는 흐리지만 늘 보인다 — 나타났다 사라지면 끌 수 있다는 걸 알 수 없다. */
+.grid-stack-item-content { position: relative; }
+.drag-handle {
+  position: absolute; left: 2px; top: 3px; z-index: 1; cursor: grab;
+  color: var(--text-dim); font-size: 13px; line-height: 1; user-select: none;
+}
+.drag-handle:hover { color: var(--text); }
+.drag-handle:active { cursor: grabbing; }
+/* 손잡이 자리를 비워 제목이 겹치지 않게 한다. */
+.grid-stack-item-content > .block-body > * > h3:first-child,
+.grid-stack-item-content > .block-body > .panel > .panel-head { padding-left: 16px; }
 .dash-sub { margin: var(--space-1) 0 0; font-size: var(--text-sm); color: var(--text-dim); }
 .dash h3 { margin: 0 0 var(--space-3); font-size: var(--text-sm); font-weight: 600; color: var(--text); }
 .dash-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: var(--space-5) var(--space-6); }
 .dash { container-type: inline-size; }
 /* 방금 일어난 일을 넓게, 최종본을 좁게. 좁은 창에서는 위아래로 쌓는다. */
 .dash-lists { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-5) var(--space-6); align-items: start; }
+/* 위젯 격자. 자리와 크기만 gridstack 에 맡기고 카드 장식은 그리지 않는다 — PRODUCT.md 의
+   안티레퍼런스는 "둥근 카드 격자"라는 생김새다. 쉴 때는 테두리도 그림자도 없다. */
+.grid-stack { width: 100%; }
+.grid-stack-item-content {
+  display: flex; flex-direction: column; min-height: 0; overflow: hidden;
+  background: var(--bg); border-radius: var(--radius-sm);
+}
+.block-body { flex: 1; min-height: 0; overflow: auto; display: flex; flex-direction: column; }
+.block-body > * { min-height: 0; }
+/* 위젯 안에서는 목록이 남는 높이를 쓴다. 위젯 높이가 곧 몇 줄 보일지다. */
+.block-body > :is(.dist, .home-list, .home-sessions, .home-status) { display: flex; flex-direction: column; min-height: 0; flex: 1; }
+.block-body > :is(.dist, .home-list, .home-sessions) > ul { overflow-y: auto; min-height: 0; }
+.home-status .kv { margin: 0 0 var(--space-2); }
+.session-list { list-style: none; margin: 0; padding: 0; }
+/* 끌거나 크기를 바꾸는 동안에만 경계를 보인다. */
+.grid-stack > .grid-stack-placeholder > .placeholder-content {
+  background: var(--accent-soft); border: 2px dashed var(--accent); border-radius: var(--radius-sm);
+}
+.grid-stack-item.ui-draggable-dragging .grid-stack-item-content,
+.grid-stack-item.ui-resizable-resizing .grid-stack-item-content { outline: 2px solid var(--accent); outline-offset: -2px; }
+/* 오른쪽 아래 모서리 표시. 늘 보이지만 조용하다. */
+.grid-stack-item > .ui-resizable-se {
+  transform: none; width: 12px; height: 12px; right: 3px; bottom: 3px;
+  border-right: 2px solid var(--border-strong); border-bottom: 2px solid var(--border-strong);
+  border-bottom-right-radius: 3px;
+}
+.grid-stack-item > .ui-resizable-se:hover { border-color: var(--accent); }
 @container (min-width: 900px) {
   .dash-lists { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); }
 }
@@ -610,7 +670,8 @@ embed.preview-fill { height: 100%; }
 .dist-n { text-align: right; font-size: var(--text-xs); color: var(--text-dim); font-variant-numeric: tabular-nums; }
 .dist-note { margin-top: var(--space-2); margin-left: var(--space-2); }
 /* 여덟 줄 반을 보인다. 반 줄이 걸쳐 있어야 아래에 더 있다는 게 보인다. */
-.change-scroll { max-height: calc(8.5 * 35px); overflow-y: auto; overscroll-behavior: contain; }
+.changes, .home-list, .panel { display: flex; flex-direction: column; min-height: 0; }
+.change-scroll { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
 /* 줄마다 따로 그리드를 두면 칩 너비에 따라 위치 칸이 줄마다 어긋난다. 목록이 열을 정하고 줄은 subgrid 로 따른다. */
 .change-list { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: 5.5em minmax(0, 1.2fr) minmax(0, 1fr) auto auto; column-gap: var(--space-3); }
 .change-list li { grid-column: 1 / -1; display: grid; grid-template-columns: subgrid; }
