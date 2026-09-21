@@ -1488,15 +1488,28 @@ async function renderHome() {
   const feed = current?.querySelector('.change-scroll');
   const feedTop = feed?.scrollTop ?? 0;
   const feedHeight = feed?.scrollHeight ?? 0;
-  let activity;
-  try {
-    activity = await api(`/api/timeline?${searchParams()}`);
-  } catch {
-    activity = null;
-  }
+  // 켜 둔 위젯이 쓰는 것만 받는다. 열 개를 다 받으면 안 보이는 위젯 때문에 매 수집마다 요청이 는다.
+  const on = new Set(homeBlocks().filter((block) => block.on).map((block) => block.id));
+  const fetchIf = (want, path) => (want ? api(path).catch(() => null) : Promise.resolve(null));
+  const [timeline, sessions, status] = await Promise.all([
+    fetchIf(on.has('activity'), `/api/timeline?${searchParams()}`),
+    fetchIf(on.has('sessions'), `/api/activity?${activityParams()}`).then((got) => got?.sessions ?? null),
+    fetchIf(on.has('status'), '/api/status'),
+  ]);
   if (token !== homeToken || state.view !== 'home') return;
-  const dash = dashboard(activity);
-  $('detail').replaceChildren(dash);
+
+  // 그리드가 이미 서 있으면 틀은 두고 내용만 갈아 끼운다. 매번 다시 세우면 수집 알림마다 깜빡이고
+  // 끌던 손이 끊긴다. 블록을 켜고 끄거나 배치를 되돌릴 때만 grid 를 비워 다시 세운다.
+  const reuse = current?.isConnected && grid?.el?.isConnected;
+  if (!reuse) {
+    $('detail').replaceChildren(dashboard());
+    startGrid();
+  } else {
+    current.replaceChild(dashboard().querySelector('.dash-head'), current.querySelector('.dash-head'));
+  }
+  const dash = $('detail').querySelector('.dash');
+  fillBlocks({ timeline, sessions, status }, state.rows.filter((r) => r.state === 'final'));
+  dash.classList.remove('refreshing');
   dash.scrollTop = scroll;
   // 실시간으로 위에 줄이 붙어도 보던 줄이 제자리에 있게 한다. 맨 위를 보고 있었으면 새 줄을 보인다.
   const nextFeed = dash.querySelector('.change-scroll');
@@ -1504,24 +1517,199 @@ async function renderHome() {
   for (const draw of dash.querySelectorAll('.chart')) draw.dispatchEvent(new Event('draw'));
 }
 
-function dashboard(activity) {
+// 개요에서 고를 수 있는 위젯. 제목줄과 키보드 안내는 틀이라 대상이 아니다.
+const HOME_BLOCKS = ['changes', 'finals', 'activity', 'kinds', 'agents', 'workspaces', 'sessions', 'status', 'favorites', 'tags'];
+// 처음 켜 두는 것. 나머지는 구성에서 고른다 — 열 개를 다 펼치면 첫 화면이 읽히지 않는다.
+const HOME_DEFAULT_ON = ['changes', 'finals', 'activity', 'kinds', 'agents', 'workspaces'];
+// 위젯 이름은 그 위젯이 실제로 쓰는 제목을 빌린다. 사전이 갈라지면 구성과 화면이 다른 말을 한다.
+const HOME_BLOCK_LABEL = {
+  changes: 'changes.title', finals: 'home.finalsTitle', activity: 'home.block.activity',
+  kinds: 'dist.kind', agents: 'dist.agent', workspaces: 'dist.workspace',
+  sessions: 'home.block.sessions', status: 'home.block.status',
+  favorites: 'home.favoritesTitle', tags: 'filter.tag',
+};
+const HOME_SESSION_COUNT = 5;
+
+// 그리드 기하. 12칸은 gridstack 기본이고 칸 높이는 피드 한 줄에 맞춰 잡았다.
+const GRID = { columns: 12, cellHeight: 40, margin: 8 };
+// 처음 놓이는 자리. 3안의 모습 그대로다 — 목록 둘이 2:1 로 한 줄, 그 아래 그래프와 분포.
+const GRID_DEFAULT = {
+  changes: { x: 0, y: 0, w: 8, h: 9 },
+  finals: { x: 8, y: 0, w: 4, h: 9 },
+  activity: { x: 0, y: 9, w: 12, h: 7 },
+  kinds: { x: 0, y: 16, w: 4, h: 6 },
+  agents: { x: 4, y: 16, w: 4, h: 6 },
+  workspaces: { x: 8, y: 16, w: 4, h: 6 },
+  sessions: { x: 0, y: 22, w: 6, h: 8 },
+  status: { x: 6, y: 22, w: 6, h: 6 },
+  favorites: { x: 0, y: 30, w: 6, h: 6 },
+  tags: { x: 6, y: 30, w: 6, h: 5 },
+};
+
+/** 저장된 구성과 기본값을 합친다. 모르는 id 는 버리고 빠진 id 는 뒤에 붙여 켠다 — 블록이 늘어도 설정이 안 깨진다. */
+function homeBlocks() {
+  const saved = prefs.read('home.blocks', []);
+  const known = (Array.isArray(saved) ? saved : []).filter((block) => HOME_BLOCKS.includes(block?.id));
+  const seen = new Set(known.map((block) => block.id));
+  return [
+    ...known.map((block) => ({ id: block.id, on: block.on !== false })),
+    ...HOME_BLOCKS.filter((id) => !seen.has(id)).map((id) => ({ id, on: HOME_DEFAULT_ON.includes(id) })),
+  ];
+}
+
+const homeLayout = () => {
+  const saved = prefs.read('home.layout', {});
+  return Object.fromEntries(HOME_BLOCKS.map((id) => [id, { ...GRID_DEFAULT[id], ...(saved?.[id] ?? {}) }]));
+};
+
+let grid = null;
+
+function saveHomeLayout() {
+  if (!grid) return;
+  const out = { ...prefs.read('home.layout', {}) };
+  for (const node of grid.engine.nodes) {
+    const id = node.el?.dataset?.block;
+    if (id) out[id] = { x: node.x, y: node.y, w: node.w, h: node.h };
+  }
+  prefs.write('home.layout', out);
+}
+
+/** 블록을 켜고 끄면 위젯이 늘거나 줄어 그리드를 다시 세워야 한다. 자리 · 크기만 바뀔 때는 세우지 않는다. */
+function setHomeBlocks(next, focus = null) {
+  prefs.write('home.blocks', next);
+  grid = null;
+  // 다시 그리면 포커스가 사라진다. 키보드로 연달아 누를 수 있게 같은 자리로 돌려놓는다.
+  void renderHome().then(() => {
+    if (!focus) return;
+    const target = document.querySelector(`.dash-config [data-focus="${focus}"]`);
+    // 맨 끝으로 간 블록의 화살표는 disabled 라 포커스를 못 받는다. 같은 줄의 체크박스로 내려앉는다.
+    if (target && !target.disabled) target.focus();
+    else document.querySelector(`.dash-config [data-focus="${focus.split(':')[0]}"]`)?.focus();
+  });
+}
+
+let homeConfigOpen = false;
+
+/**
+ * 끌기와 크기 조절은 마우스만 닿는다. 구성 패널이 키보드 경로다 — 켜고 끄기, 한 칸씩 올리고 내리기,
+ * 기본 배치로 되돌리기. 세밀한 크기 조절까지 키보드로 열면 격자 편집기를 하나 더 만드는 일이 된다.
+ */
+function homeConfig() {
+  const blocks = homeBlocks();
+  const nudge = (id, step) => {
+    const item = grid?.engine.nodes.find((node) => node.el?.dataset?.block === id);
+    if (!item) return;
+    grid.update(item.el, { y: Math.max(0, item.y + step) });
+    saveHomeLayout();
+    document.querySelector(`.dash-config [data-focus="${id}:${step}"]`)?.focus();
+  };
+  const arrow = (block, step, key, glyph) => el('button', {
+    type: 'button',
+    className: 'icon-button',
+    disabled: !block.on,
+    attrs: { 'data-focus': `${block.id}:${step}`, title: t(key), 'aria-label': t(key) },
+    onclick: () => nudge(block.id, step),
+  }, glyph);
+
+  const list = blocks.map((block, index) => el('li', {},
+    el('label', {},
+      el('input', {
+        type: 'checkbox',
+        checked: block.on,
+        attrs: { 'data-focus': block.id },
+        onchange: () => setHomeBlocks(blocks.map((other, i) => (i === index ? { ...other, on: !other.on } : other)), block.id),
+      }),
+      t(HOME_BLOCK_LABEL[block.id])),
+    arrow(block, -1, 'home.moveUp', '↑'),
+    arrow(block, 1, 'home.moveDown', '↓')));
+
+  const box = el('details', { className: 'dash-config', open: homeConfigOpen },
+    el('summary', {}, t('home.config')),
+    el('div', { className: 'dash-config-body' },
+      el('ul', {}, ...list),
+      el('button', {
+        type: 'button',
+        className: 'link',
+        onclick: () => {
+          prefs.write('home.layout', {});
+          grid = null;
+          void renderHome();
+        },
+      }, t('home.resetLayout'))));
+  box.addEventListener('toggle', () => { homeConfigOpen = box.open; });
+  return box;
+}
+
+/**
+ * 위젯 껍데기. 내용은 fillBlocks 가 채운다 — 30초마다 오는 수집 알림에 그리드째 다시 세우면
+ * 화면이 깜빡이고 끌던 손이 끊긴다. gs-* 속성은 gridstack 이 초기화할 때 읽는 자리 · 크기다.
+ */
+function gridItem(id, layout) {
+  return el('div', {
+    className: 'grid-stack-item',
+    attrs: { 'data-block': id, 'gs-x': layout.x, 'gs-y': layout.y, 'gs-w': layout.w, 'gs-h': layout.h },
+  }, el('div', { className: 'grid-stack-item-content' },
+    el('span', { className: 'drag-handle', textContent: '⠿', attrs: { title: t('home.drag'), 'aria-hidden': 'true' } }),
+    el('div', { className: 'block-body', attrs: { 'data-body': id } })));
+}
+
+function fillBlocks(data, finals) {
+  const build = {
+    changes: () => changesPanel(),
+    finals: () => homeList(t('home.finalsTitle'), finals.slice(0, HOME_LIST_COUNT), t('home.finalsEmpty')),
+    favorites: () => homeList(t('home.favoritesTitle'), state.rows.filter((row) => row.favorite).slice(0, HOME_LIST_COUNT), t('home.favoritesEmpty')),
+    activity: () => (data.timeline ? activityPanel(data.timeline) : el('p', { className: 'hint' }, t('home.activityFailed'))),
+    kinds: () => distKinds(),
+    agents: () => distAgents(),
+    workspaces: () => distWorkspaces(),
+    tags: () => distTags(),
+    sessions: () => sessionsPanel(data.sessions),
+    status: () => statusPanel(data.status),
+  };
+  for (const id of HOME_BLOCKS) {
+    const host = $('detail').querySelector(`.block-body[data-body="${id}"]`);
+    if (host) host.replaceChildren(build[id]());
+  }
+}
+
+/** 끌기는 손잡이로만. 위젯 전체를 잡게 두면 피드 글자를 긁어 고를 수 없다. */
+function startGrid() {
+  const host = $('detail').querySelector('.grid-stack');
+  if (!host || !globalThis.GridStack) return;
+  grid = globalThis.GridStack.init({
+    column: GRID.columns,
+    cellHeight: GRID.cellHeight,
+    margin: GRID.margin,
+    handle: '.drag-handle',
+    // 장식성 애니메이션은 두지 않는다.
+    animate: false,
+    // 모서리 하나만. 기본값은 hover 때만 보이는데, 그러면 크기를 바꿀 수 있다는 걸 알 수 없다.
+    resizable: { handles: 'se' },
+    alwaysShowResizeHandle: true,
+  }, host);
+  grid.on('change', saveHomeLayout);
+}
+
+/** 틀만 만든다(머리 · 빈 그리드 · 키보드 안내). 내용은 fillBlocks 가 채운다. */
+function dashboard() {
   const finals = state.rows.filter((r) => r.state === 'final');
   const repos = new Set(state.rows.map((r) => r.location?.repo).filter(Boolean));
+  const layout = homeLayout();
+  const on = homeBlocks().filter((block) => block.on).map((block) => block.id);
 
   return el('div', { className: 'dash' },
     el('header', { className: 'dash-head' },
-      // 기간은 필터가 아니라 보는 창이다. 제목은 그대로 두고 부제에 기간을 적는다.
-      el('h2', {}, t(state.q.trim() ? 'home.search' : Object.keys(state.filters).length ? 'home.filter' : 'home.library')),
-      el('p', { className: 'dash-sub' },
-        [state.period !== 'all' && t(`periodTitle.${state.period}`), t('home.count', { n: state.total }), t('home.finals', { n: finals.length }), t('home.repos', { n: repos.size })].filter(Boolean).join(' · '))),
-    // 목록이 먼저다. 이 화면을 여는 두 순간(찾을 때, 흘끗 볼 때) 모두 몇 달 치 추이보다 방금 바뀐 것과
-    // 최종본이 먼저 필요하다. "최근 바뀐 것" 목록은 두지 않는다 — 방금 일어난 일이 같은 파일을
-    // 무엇이 · 누가 · 언제까지 더 말한다.
-    el('div', { className: 'dash-lists' },
-      changesPanel(),
-      homeList(t('home.finalsTitle'), finals.slice(0, HOME_LIST_COUNT), t('home.finalsEmpty'))),
-    activity ? activityPanel(activity) : el('p', { className: 'hint' }, t('home.activityFailed')),
-    distributions(),
+      el('div', { className: 'dash-title' },
+        // 기간은 필터가 아니라 보는 창이다. 제목은 그대로 두고 부제에 기간을 적는다.
+        el('h2', {}, t(state.q.trim() ? 'home.search' : Object.keys(state.filters).length ? 'home.filter' : 'home.library')),
+        el('p', { className: 'dash-sub' },
+          [state.period !== 'all' && t(`periodTitle.${state.period}`), t('home.count', { n: state.total }), t('home.finals', { n: finals.length }), t('home.repos', { n: repos.size })].filter(Boolean).join(' · '))),
+      homeConfig()),
+    on.length === 0
+      ? el('div', { className: 'dash-off' },
+        el('p', { className: 'hint' }, t('home.blocksOff')),
+        el('button', { type: 'button', onclick: () => setHomeBlocks(HOME_BLOCKS.map((id) => ({ id, on: true }))) }, t('home.blocksRestore')))
+      : el('div', { className: 'grid-stack' }, ...on.map((id) => gridItem(id, layout[id]))),
     el('p', { className: 'keys' },
       el('span', {}, kbd('↑'), kbd('↓'), ` ${t('keys.move')}`),
       el('span', {}, kbd('←'), kbd('→'), ` ${t('keys.fold')}`),
@@ -1755,35 +1943,88 @@ function distribution(title, rows, { key, agentColor = false, note = null }) {
     note);
 }
 
-function distributions() {
+// 분포는 차원마다 위젯 하나다. 한 덩어리로 묶여 있으면 작업공간만 키우거나 종류만 뺄 수 없다.
+const noFacets = () => el('p', { className: 'hint' }, t('dist.none'));
+
+function distKinds() {
   const facets = state.facets;
-  if (!facets) return null;
+  if (!facets) return noFacets();
   const hidden = new Set(facets.libraryHidden ?? []);
   const kinds = facets.kinds.filter((k) => !hidden.has(k.value) || state.filters.kind === k.value);
   const outside = state.filters.kind ? 0 : facets.kinds.filter((k) => hidden.has(k.value)).reduce((s, k) => s + k.n, 0);
+  return distribution(t('dist.kind'), kinds.slice(0, DIST_ROWS).map((k) => ({ value: k.value, label: kindLabel(k.value), n: k.n })), {
+    key: 'kind',
+    note: outside > 0 && el('button', {
+      type: 'button',
+      className: 'link quiet-link dist-note',
+      onclick: () => {
+        $('filters').open = true;
+        facetOpen.kind = true;
+        renderFilters(state.facets);
+      },
+    }, t('dist.outside', { n: outside })),
+  });
+}
 
-  return el('div', { className: 'dash-grid dists' },
-    distribution(t('dist.kind'), kinds.slice(0, DIST_ROWS).map((k) => ({ value: k.value, label: kindLabel(k.value), n: k.n })), {
-      key: 'kind',
-      note: outside > 0 && el('button', {
-        type: 'button',
-        className: 'link quiet-link dist-note',
-        onclick: () => {
-          $('filters').open = true;
-          facetOpen.kind = true;
-          renderFilters(state.facets);
-        },
-      }, t('dist.outside', { n: outside })),
-    }),
-    distribution(t('dist.agent'), orderedAgents(facets.providers.map((p) => p.value))
-      .map((value) => ({ value, label: agentName(value), n: facets.providers.find((p) => p.value === value).n })), {
-      key: 'provider',
-      agentColor: true,
-    }),
-    distribution(t('dist.workspace'), facets.workspaces.slice(0, DIST_ROWS).map((w) =>
-      ({ value: w.value, label: workspaceLabel(w.value), title: t('dist.workspaceTitle', { path: w.value }), n: w.n })), {
-      key: 'workspace',
-    }));
+function distAgents() {
+  const facets = state.facets;
+  if (!facets) return noFacets();
+  return distribution(t('dist.agent'), orderedAgents(facets.providers.map((p) => p.value))
+    .map((value) => ({ value, label: agentName(value), n: facets.providers.find((p) => p.value === value).n })), {
+    key: 'provider',
+    agentColor: true,
+  });
+}
+
+function distWorkspaces() {
+  const facets = state.facets;
+  if (!facets) return noFacets();
+  return distribution(t('dist.workspace'), facets.workspaces.slice(0, DIST_ROWS).map((w) =>
+    ({ value: w.value, label: workspaceLabel(w.value), title: t('dist.workspaceTitle', { path: w.value }), n: w.n })), {
+    key: 'workspace',
+  });
+}
+
+function distTags() {
+  const facets = state.facets;
+  if (!facets) return noFacets();
+  return distribution(t('filter.tag'), (facets.tags ?? []).slice(0, DIST_ROWS).map((tag) =>
+    ({ value: tag.value, label: tag.value, n: tag.n })), { key: 'tag' });
+}
+
+/** 최근 대화. 활동 보기로 넘어가지 않고 "지금 에이전트가 무엇을 했나"를 개요에서 본다. */
+function sessionsPanel(sessions) {
+  if (!sessions) return el('p', { className: 'hint' }, t('home.activityFailed'));
+  return el('section', { className: 'home-sessions' },
+    el('h3', {}, t('home.block.sessions')),
+    sessions.length
+      ? el('ul', { className: 'session-list' }, ...sessions.slice(0, HOME_SESSION_COUNT).map(sessionCard))
+      : el('p', { className: 'hint' }, t('activity.empty')));
+}
+
+/** 수집이 살아 있나. 상단의 점과 탭 제목이 말하는 것을 펼쳐 놓은 자리다. */
+function statusPanel(status) {
+  if (!status) return el('p', { className: 'hint' }, t('home.statusFailed'));
+  const watcher = status.watcher ?? {};
+  const counts = status.counts ?? {};
+  const rows = [
+    [t('status.lastSweep'), watcher.lastSweepAt ? relativeWhen(watcher.lastSweepAt) : '—'],
+    [t('status.sweeps'), num(watcher.sweeps ?? 0)],
+    [t('status.watching'), num(watcher.watching ?? 0)],
+    [t('status.artifacts'), num(counts.artifacts ?? 0)],
+    [t('status.origins'), num(counts.origins ?? 0)],
+  ];
+  // "최근"은 상단 표시와 같은 뜻이어야 한다. 서버가 한 시간으로 자른 recentError 를 그대로 쓰고,
+  // 그보다 오래된 기록은 건수만 조용히 남긴다 — 두 자리가 다른 기준으로 "최근"을 말하면 못 믿는다.
+  const logged = (status.events ?? []).filter((event) => event.level === 'error').length;
+  const recent = watcher.recentError;
+  return el('section', { className: 'home-status' },
+    el('h3', {}, t('home.block.status')),
+    el('dl', { className: 'kv' }, ...rows.flatMap(([key, value]) => [el('dt', {}, key), el('dd', {}, value)])),
+    recent
+      ? el('button', { type: 'button', className: 'link danger', onclick: () => void showCoverage() }, t('live.error', { when: relativeWhen(recent.at) }))
+      : el('p', { className: 'hint' }, t('status.clean')),
+    !recent && logged > 0 && el('button', { type: 'button', className: 'link quiet-link', onclick: () => void showCoverage() }, t('status.logged', { n: logged })));
 }
 
 // ── 주소 ───────────────────────────────────────────────────────────────
@@ -2028,10 +2269,38 @@ const collectErrorButton = el('button', { type: 'button', className: 'link dange
 $('live').after(collectErrorButton);
 function renderCollectError() {
   collectErrorButton.hidden = !collectError;
-  if (!collectError) return;
-  collectErrorButton.textContent = t('live.error', { when: relativeWhen(collectError.at) });
-  collectErrorButton.title = [collectError.code, collectError.message, collectError.path].filter(Boolean).join(' · ');
+  if (collectError) {
+    collectErrorButton.textContent = t('live.error', { when: relativeWhen(collectError.at) });
+    collectErrorButton.title = [collectError.code, collectError.message, collectError.path].filter(Boolean).join(' · ');
+  }
+  renderTitle();
 }
+
+/**
+ * 탭 줄은 이 창이 백그라운드일 때 보이는 유일한 자리다. 인페이지 알림은 거기서 보이지 않고 돌아오면
+ * 이미 닫혀 있다. 안 본 변경 수와 멈춤만 제목에 적는다.
+ *
+ * 수는 서버가 준 원본이라 라이브러리가 숨기는 종류(코드·메모·기타)도 든다. 돌아왔을 때 피드의
+ * "라이브러리가 숨긴 변경" 줄과 더하면 맞춰 볼 수 있고, 활동 보기처럼 피드를 받지 않는 화면에서도 센다.
+ */
+const BASE_TITLE = document.title;
+const TITLE_COUNT_CAP = 99;
+let unseenChanges = 0;
+
+function renderTitle() {
+  // 멈춤 판정은 상단 표시와 같은 조건이다. 화면과 탭이 다른 말을 하지 않게.
+  const stalled = $('live').dataset.status === 'down' || collectError !== null;
+  const count = unseenChanges > TITLE_COUNT_CAP ? `${num(TITLE_COUNT_CAP)}+` : num(unseenChanges);
+  const marks = [stalled && '⚠', unseenChanges > 0 && `(${count})`].filter(Boolean).join(' ');
+  document.title = marks ? `${marks} ${BASE_TITLE}` : BASE_TITLE;
+}
+
+// 포커스가 아니라 가시성으로 판단한다. 창을 나란히 띄워 두면 포커스가 없어도 보고 있는 것이다.
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) return;
+  unseenChanges = 0;
+  renderTitle();
+});
 
 function connectLive() {
   const source = new EventSource('/api/events');
@@ -2045,6 +2314,8 @@ function connectLive() {
     if ('error' in payload) collectError = payload.error;
     if (payload.type === 'failed' || payload.type === 'hello') renderCollectError();
     if (payload.type !== 'collected') return;
+    // 보고 있으면 세지 않는다. 피드가 이미 개요 맨 위에서 같은 것을 말한다.
+    if (document.hidden) unseenChanges += payload.changes ?? 0;
     lastCollectedAt = payload.at;
     renderLive('up');
     clearTimeout(liveTimer);
