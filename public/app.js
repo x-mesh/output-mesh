@@ -313,18 +313,34 @@ const SHJ_FILENAME = { Makefile: 'make', Dockerfile: 'docker', Justfile: 'make' 
 
 const langOf = (ext, fileName) => SHJ_FILENAME[fileName] ?? SHJ_LANG[ext];
 
+/**
+ * 줄마다 한 행으로 감싼다. 줄 수만큼 빈 칸을 왼쪽에 세우는 흔한 방법은 본문이 접히는 순간
+ * (`white-space: pre-wrap`) 번호가 한 줄씩 밀린다. 행이 자기 번호를 들고 있으면 접혀도 맞는다.
+ * 번호는 `::before` 라 긁어 복사할 때 딸려오지 않는다.
+ */
 async function codeNodes(text, lang, limit) {
   const { tokenize } = await import('/vendor/shj/index.js');
-  const nodes = [];
+  const lines = [[]];
   let budget = limit;
+  const put = (node) => lines.at(-1).push(node);
+
   await tokenize(text, lang, (chunk, type) => {
     if (!chunk) return;
-    const inner = highlighted(chunk, budget);
-    budget -= inner.filter((node) => node instanceof Node).length;
-    if (type) nodes.push(el('span', { className: `shj-syn-${type}` }, ...inner));
-    else nodes.push(...inner);
+    // 토큰 하나가 여러 줄에 걸칠 수 있다(블록 주석, 여러 줄 문자열). 줄마다 같은 색으로 쪼갠다.
+    const pieces = chunk.split('\n');
+    for (let at = 0; at < pieces.length; at += 1) {
+      if (at > 0) lines.push([]);
+      if (pieces[at] === '') continue;
+      const inner = highlighted(pieces[at], budget);
+      budget -= inner.filter((node) => node instanceof Node).length;
+      if (type) put(el('span', { className: `shj-syn-${type}` }, ...inner));
+      else for (const node of inner) put(node);
+    }
   });
-  return nodes;
+
+  // 마지막 줄바꿈 뒤의 빈 행은 세지 않는다. 파일 끝의 개행 하나가 번호를 하나 더 만든다.
+  if (lines.length > 1 && lines.at(-1).length === 0) lines.pop();
+  return lines.map((nodes) => el('div', { className: 'shj-line' }, ...nodes));
 }
 
 /** 색칠이 안 되는 형식이거나 너무 크면 지금까지처럼 글자만 보인다. 실패해도 마찬가지다. */
@@ -332,7 +348,12 @@ async function codePre(text, ext, fileName) {
   const lang = text.length <= MAX_HIGHLIGHT_BYTES ? langOf(ext, fileName) : undefined;
   if (lang) {
     try {
-      return el('pre', { className: 'preview-text shj', attrs: { 'data-lang': lang } }, ...await codeNodes(text, lang, MAX_PREVIEW_MARKS));
+      const lines = await codeNodes(text, lang, MAX_PREVIEW_MARKS);
+      // 번호 칸의 폭은 자릿수를 따른다. 1,000줄이 넘으면 세 자리로는 본문이 밀린다.
+      return el('pre', {
+        className: 'preview-text shj',
+        attrs: { 'data-lang': lang, style: `--gutter: ${String(lines.length).length + 1}ch` },
+      }, ...lines);
     } catch {
       // 언어 파일을 못 받았거나 토큰화가 터졌다. 글자는 보여야 한다.
     }
