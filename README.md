@@ -51,6 +51,7 @@ bun bin/output-mesh.mjs
 | Aside | `~/.aside/u/<account>/sessions/<date>_<id>/artifacts/` | Watches the folder, enriches from Aside's `state.db` (opened read-only) |
 | Codex | `~/.codex/sessions/**/rollout-*.jsonl` | Paths from `apply_patch` markers in session logs |
 | Claude Code | `~/.claude/projects/**/*.jsonl` | `file_path` of `Write` / `Edit` tool calls |
+| Cursor | `~/Library/Application Support/Cursor/.../state.vscdb` | Files a composer edited or created (opened read-only) |
 | Your repositories | Repositories any of the above worked in | Documents changed in the last 7 days, then a folder watch for new or edited ones |
 | Anything else | A folder or file you choose | `output-mesh import <path>` |
 
