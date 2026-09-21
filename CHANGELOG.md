@@ -25,6 +25,12 @@ lives in `package.json`; `output-mesh --version` and the explorer footer show it
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-09-21
+
+### Fixed
+
+- 상단 바에 뜨던 "false" 를 없앤다
+
 ## [0.5.0] - 2026-09-21
 
 ### Added
