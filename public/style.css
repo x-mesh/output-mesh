@@ -368,6 +368,23 @@ kbd {
 /* 파일은 폴더 화살표 자리만큼 들여 아이콘이 폴더 아이콘과 줄을 맞춘다. */
 .tree-item.file { align-items: flex-start; padding-top: 5px; padding-bottom: 5px; padding-left: calc(var(--space-1) + 21px + var(--level) * var(--indent) - var(--indent)); }
 .tree-item.file .kind { margin-top: 1px; color: var(--text-dim); }
+/* 펴지는 번들은 화살표가 그 자리를 쓰므로 파일 들여쓰기 보정을 되돌린다. */
+.tree-item.file.expandable { padding-left: calc(var(--space-1) + var(--level) * var(--indent)); }
+.tree-item.file.expandable > .chevron { margin-top: 1px; color: var(--text-dim); transition: transform var(--fast) var(--ease-out); }
+.tree-item.file.expandable[aria-expanded="true"] > .chevron { transform: rotate(90deg); }
+.tree-item.file.member .file-name { font-family: var(--mono); font-size: var(--text-xs); }
+
+.context-menu {
+  position: fixed; z-index: 60; min-width: 172px; padding: var(--space-1);
+  display: flex; flex-direction: column;
+  background: var(--bg); border: 1px solid var(--line); border-radius: var(--radius);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, .18);
+}
+.context-menu button {
+  padding: 4px var(--space-3); border: 0; border-radius: var(--radius);
+  background: none; color: var(--text); font: inherit; text-align: left; white-space: nowrap; cursor: default;
+}
+.context-menu button:hover, .context-menu button:focus-visible { background: var(--bg-hover); outline: none; }
 .file-text { flex: 1; min-width: 0; }
 .file-line { display: flex; align-items: center; gap: 5px; min-width: 0; }
 .file-prefix { color: var(--text-dim); white-space: nowrap; flex-shrink: 1; overflow: hidden; text-overflow: ellipsis; max-width: 45%; }
@@ -464,6 +481,17 @@ embed.preview-fill { height: 100%; }
   overflow: auto; font: var(--text-sm)/1.6 var(--mono);
   white-space: pre-wrap; word-break: break-word; tab-size: 2;
 }
+.members {
+  flex: 1; min-height: 0; list-style: none; margin: 0; overflow: auto;
+  padding: var(--space-5) var(--space-6); display: grid; gap: var(--space-1); align-content: start;
+}
+.members button { text-align: left; }
+.member-view { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.member-bar {
+  display: flex; align-items: baseline; gap: var(--space-3); flex-shrink: 0;
+  padding: var(--space-2) var(--space-6); border-bottom: 1px solid var(--line);
+}
+.member-bar .mono { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .preview-image { flex: 1; min-height: 0; display: grid; place-items: center; padding: var(--space-5); background: var(--bg-side); overflow: auto; }
 .preview-image img { max-width: 100%; max-height: 100%; object-fit: contain; box-shadow: 0 1px 3px rgba(0, 0, 0, .14); background: var(--bg); }
 .sheet { overflow: hidden; }
