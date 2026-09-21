@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { readdirSync, statSync } from 'node:fs';
+import { existsSync, readdirSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { AsideReader } from '../lib/aside-reader.mjs';
 import { asideAccountDirs } from '../lib/paths.mjs';
@@ -40,6 +40,17 @@ function collectFromDb() {
     const dir = dirMap.get(row.session_id);
     if (!dir) continue;
     if (classifyFilesChangedPath(dir, row.rel_path).collect) out.add(`${dir}/${row.rel_path}`);
+  }
+  return out;
+}
+
+/** Aside 가 변경으로 기록한 모든 경로. 산출물 표시가 없는 것도 든다. */
+function trackedByAside() {
+  const dirMap = reader.sessionDirMap();
+  const out = new Set();
+  for (const row of reader.changedFiles(0)) {
+    const dir = dirMap.get(row.session_id);
+    if (dir && row.rel_path) out.add(`${dir}/${row.rel_path}`);
   }
   return out;
 }
@@ -95,11 +106,15 @@ maybe('V1 — Aside 라이브 계약', () => {
 });
 
 maybe('V3 — 파일시스템 ≡ DB 일치', () => {
-  test('depth-1 규칙과 Aside 자신의 산출물 플래그가 같은 집합을 고른다', () => {
+  test('Aside 가 기록한 파일에 대해서는 depth-1 규칙과 산출물 플래그가 같은 집합을 고른다', () => {
     const fromDisk = collectFromDisk();
     const fromDb = collectFromDb();
-    const onlyDisk = [...fromDisk].filter((p) => !fromDb.has(p));
-    const onlyDb = [...fromDb].filter((p) => !fromDisk.has(p));
+    const tracked = trackedByAside();
+    // Aside 가 기록하지 않은 파일은 플래그로 판정할 수 없다. 이미지 생성 도구나 셸이 artifacts/ 에 바로
+    // 쓴 것들이고(실측 5개: imagegen-*.png, 스크린샷, .mjs), 디스크 규칙만 그것들을 잡는다.
+    const onlyDisk = [...fromDisk].filter((p) => !fromDb.has(p) && tracked.has(p));
+    // 표시된 뒤 지워지거나 이름이 바뀐 파일은 어느 규칙의 잘못도 아니다(실측 1개).
+    const onlyDb = [...fromDb].filter((p) => !fromDisk.has(p) && existsSync(join(reader.sessionsRoot, p)));
     expect({ onlyDisk, onlyDb }).toEqual({ onlyDisk: [], onlyDb: [] });
     expect(fromDisk.size).toBeGreaterThan(0);
   });
