@@ -26,6 +26,7 @@
   --claude: #d97757;
   --aimesh: #7c5cff;
   --aside: #8e8e93;
+  --cursor: #8e8e93;
   --bar: #6b7c93;
   --grid: #ececef;
 
@@ -84,6 +85,7 @@
   --claude: #d4744e;
   --aimesh: #8a6cff;
   --aside: #8e8e93;
+  --cursor: #8e8e93;
   --bar: #8d9db1;
   --grid: #2c2c2f;
 }
@@ -624,6 +626,8 @@ embed.preview-fill { height: 100%; }
 [data-provider="openai-codex"] { --series: var(--codex); }
 [data-provider="claude-code"] { --series: var(--claude); }
 [data-provider="ai-mesh"] { --series: var(--aimesh); }
+/* Cursor 는 중립 회색이다. 검증한 세 색 사이에 넷째를 끼우면 적색맹 인접 ΔE 가 좁아진다. */
+[data-provider="cursor"] { --series: var(--cursor); }
 .swatch[data-provider], .tip-key[data-provider], .dist-bar[data-provider] { background: var(--series, var(--aside)); }
 
 .chart { position: relative; min-height: 192px; }

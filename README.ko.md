@@ -51,6 +51,7 @@ bun bin/output-mesh.mjs
 | Aside | `~/.aside/u/<계정>/sessions/<날짜>_<id>/artifacts/` | 폴더 감시, Aside 의 `state.db` 로 보강(읽기 전용으로 연다) |
 | Codex | `~/.codex/sessions/**/rollout-*.jsonl` | 세션 로그의 `apply_patch` 마커에서 쓴 경로 |
 | Claude Code | `~/.claude/projects/**/*.jsonl` | `Write` / `Edit` 도구 호출의 `file_path` |
+| Cursor | `~/Library/Application Support/Cursor/.../state.vscdb` | composer 가 고치거나 새로 만든 파일 (읽기 전용으로 연다) |
 | 내 저장소 | 위의 에이전트가 일한 저장소 | 최근 7일 안에 바뀐 문서, 그 뒤로는 폴더 감시로 새로 생기거나 바뀐 문서 |
 | 그 밖의 것 | 직접 고른 폴더나 파일 | `output-mesh import <경로>` |
 
