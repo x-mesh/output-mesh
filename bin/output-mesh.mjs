@@ -13,7 +13,7 @@ import { CATALOG_DB, COMPACT_HINT_RATIO, DEFAULT_HOST, DEFAULT_PORT, INGEST_ERRO
 import { collectProgressText, count, createSpinner } from '../lib/spinner.mjs';
 import { NAME, VERSION } from '../lib/version.mjs';
 import { looksEphemeral, serviceCommand, servicePlan } from '../lib/service.mjs';
-import { clearRun, readRun, writeRun } from '../lib/running.mjs';
+import { acquireWriterLock, clearRun, readRun, releaseWriterLock, writeRun } from '../lib/running.mjs';
 
 const args = process.argv.slice(2);
 const command = args[0] ?? 'serve';
@@ -133,7 +133,31 @@ async function runService(verb) {
 }
 
 const dbPath = flag('--db', CATALOG_DB);
-const store = new CatalogStore(dbPath);
+const catalogCommands = new Set(['serve', 'sweep', 'import', 'doctor', 'compact']);
+const writerCommands = new Set(['serve', 'sweep', 'import', 'doctor', 'compact']);
+let catalogLock = null;
+let store = null;
+if (catalogCommands.has(command)) {
+  if (writerCommands.has(command) && command !== 'serve') {
+    const running = readRun(dbPath);
+    if (running) {
+      console.error('Catalog is already in use by pid ' + running.pid + '. Stop it before using this catalog.');
+      process.exit(1);
+    }
+  }
+  if (writerCommands.has(command)) {
+    try {
+      catalogLock = acquireWriterLock(dbPath, { command });
+    } catch (error) {
+      console.error(error.code === 'CATALOG_LOCKED'
+        ? error.message + ' Stop the other process before using this catalog.'
+        : 'Could not lock the catalog: ' + error.message);
+      process.exit(1);
+    }
+    process.once('exit', () => releaseWriterLock(catalogLock));
+  }
+  store = new CatalogStore(dbPath);
+}
 const readers = asideReaders();
 
 switch (command) {
@@ -190,7 +214,6 @@ switch (command) {
   case 'restart':
   case 'status': {
     // 카탈로그를 건드리지 않는 명령이다. 서비스가 이미 물고 있는 DB 를 두 번 열지 않는다.
-    store.close();
     await runService(command);
     break;
   }
@@ -229,7 +252,6 @@ switch (command) {
         console.log(`  제외된 최대 묶음: ${group.name} (${group.files}개)`);
       }
     }
-    store.close();
     break;
   }
 
