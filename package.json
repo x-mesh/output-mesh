@@ -1,6 +1,6 @@
 {
   "name": "output-mesh",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Local catalog of what your AI agents made: search, preview, and trace every artifact back to the session that wrote it",
   "type": "module",
   "bin": {
