@@ -13,6 +13,7 @@ import { CATALOG_DB, COMPACT_HINT_RATIO, DEFAULT_HOST, DEFAULT_PORT, INGEST_ERRO
 import { collectProgressText, count, createSpinner } from '../lib/spinner.mjs';
 import { NAME, VERSION } from '../lib/version.mjs';
 import { looksEphemeral, serviceCommand, servicePlan } from '../lib/service.mjs';
+import { clearRun, readRun, writeRun } from '../lib/running.mjs';
 
 const args = process.argv.slice(2);
 const command = args[0] ?? 'serve';
@@ -97,21 +98,78 @@ async function runService(verb) {
     return;
   }
 
-  if (!existsSync(plan.path)) {
-    console.error(`Not installed. Run \`${NAME} install\` first.`);
+  const installed = existsSync(plan.path);
+  const running = readRun(dbPath);
+
+  if (verb === 'status') {
+    console.log(installed ? `Service    ${plan.path}` : 'Service    not installed');
+    console.log(running
+      ? `Running    pid ${running.pid} · http://${DEFAULT_HOST}:${running.port}`
+      : 'Running    no');
+    if (installed) for (const step of plan.status) await run(step);
+    return;
+  }
+
+  // 서비스로 띄웠으면 운영체제가 멈춰야 한다 — 그냥 죽이면 KeepAlive 가 곧바로 되살린다.
+  // 손으로 띄운 것은 기록해 둔 pid 로 멈춘다. 이게 없으면 pkill 말고 방법이 없었다.
+  if (verb === 'stop' || verb === 'restart') {
+    if (installed) for (const step of verb === 'stop' ? plan.unload : plan.restart) await run(step);
+    else if (running) {
+      process.kill(running.pid, 'SIGTERM');
+      console.log(`Stopped pid ${running.pid}.`);
+      if (verb === 'restart') console.log(`Start it again with \`${NAME} serve\`.`);
+    } else console.log('Nothing to stop.');
+    return;
+  }
+
+  // start
+  if (!installed) {
+    console.error(running
+      ? `Already running (pid ${running.pid}) on http://${DEFAULT_HOST}:${running.port}.`
+      : `Not installed. Run \`${NAME} install\` first, or \`${NAME} serve\` to run it here.`);
     process.exit(2);
   }
-  const steps = { start: plan.load, stop: plan.unload, restart: plan.restart, status: plan.status }[verb];
-  for (const step of steps) await run(step);
+  for (const step of plan.load) await run(step);
 }
 
-const store = new CatalogStore(flag('--db', CATALOG_DB));
+const dbPath = flag('--db', CATALOG_DB);
+const store = new CatalogStore(dbPath);
 const readers = asideReaders();
 
 switch (command) {
   case 'serve': {
     const port = Number(flag('--port', DEFAULT_PORT));
+    const already = readRun(dbPath);
+    if (already) {
+      console.error(`Already running (pid ${already.pid}) on http://${DEFAULT_HOST}:${already.port}.\n`
+        + `  ${NAME} status    see it\n  ${NAME} stop      stop it`);
+      store.close();
+      process.exit(1);
+    }
+
     const watcher = new Watcher(store, readers);
+    // 수집보다 먼저 자리를 잡는다. 순서가 뒤면 몇 분짜리 로그 파싱을 다 하고 나서야 포트가
+    // 막혔다는 걸 알게 된다 — 실제로 그렇게 버렸다.
+    try {
+      await startServer({ store, watcher, readers }, { port, host: DEFAULT_HOST });
+    } catch (error) {
+      // 다른 포트로 몰래 옮기지 않는다. 같은 카탈로그에 두 서버가 붙으면 쓰기가 서로 막혀
+      // 수집이 'database is locked' 로 죽는다 — 실제로 그렇게 기록됐다.
+      console.error(error.code === 'EADDRINUSE'
+        ? `Port ${port} is already in use. Stop the other instance, or pick another port:\n  ${NAME} serve --port ${port + 1}`
+        : `Could not start the server: ${error.message}`);
+      store.close();
+      process.exit(1);
+    }
+    writeRun(dbPath, { port });
+    const leave = () => {
+      watcher.stop();
+      clearRun(dbPath);
+      store.close();
+      process.exit(0);
+    };
+    for (const signal of ['SIGINT', 'SIGTERM']) process.once(signal, leave);
+
     const spinner = createSpinner();
     if (store.counts().artifacts === 0) {
       spinner.note('First run: reading every agent log. This can take a few minutes.');
@@ -121,25 +179,7 @@ switch (command) {
     await watcher.start({ onProgress: (progress) => spinner.update(...collectProgressText(progress)) });
     const seconds = ((performance.now() - started) / 1000).toFixed(1);
     spinner.stop(`Collected in ${seconds}s`);
-    try {
-      await startServer({ store, watcher, readers }, { port, host: DEFAULT_HOST });
-    } catch (error) {
-      // 다른 포트로 몰래 옮기지 않는다. 같은 카탈로그에 두 서버가 붙으면 쓰기가 서로 막혀
-      // 수집이 'database is locked' 로 죽는다 — 실제로 그렇게 기록됐다.
-      console.error(error.code === 'EADDRINUSE'
-        ? `Port ${port} is already in use. Stop the other instance, or pick another port:\n  ${NAME} serve --port ${port + 1}`
-        : `Could not start the server: ${error.message}`);
-      watcher.stop();
-      store.close();
-      process.exit(1);
-    }
-    // 서버가 뜬 다음에만 주소를 적는다. 먼저 적으면 뜨지 못했을 때 죽은 주소를 권하게 된다.
     for (const line of startupLines(store, readers, port)) console.log(line);
-    process.on('SIGINT', () => {
-      watcher.stop();
-      store.close();
-      process.exit(0);
-    });
     break;
   }
 
