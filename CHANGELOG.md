@@ -25,6 +25,17 @@ lives in `package.json`; `output-mesh --version` and the explorer footer show it
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-09-21
+
+### Added
+
+- 코드 미리보기에 줄 번호를 단다
+- 코드 미리보기에 문법 색칠을 넣는다
+
+### Fixed
+
+- **collection:** prevent catalog writer collisions
+
 ## [0.5.1] - 2026-09-21
 
 ### Fixed
