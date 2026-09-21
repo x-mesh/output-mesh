@@ -5,10 +5,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { CatalogStore } from '../lib/store.mjs';
 import { AsideReader } from '../lib/aside-reader.mjs';
-import { collectOnce, enrich, sweep } from '../lib/collector.mjs';
+import { collectOnce, enrich, ingestWorkspaceDoc, sweep } from '../lib/collector.mjs';
 import { Watcher } from '../lib/watcher.mjs';
 import { search } from '../lib/search.mjs';
-import { nfc } from '../lib/paths.mjs';
+import { BUNDLE_MIN_FILES, nfc } from '../lib/paths.mjs';
 
 const SESSION_ID = 'TESTSESS000001';
 const SESSION_DIR = `2026-01-01_${SESSION_ID}`;
@@ -273,6 +273,7 @@ describe('번들 — 프로젝트 폴더를 한 줄로', () => {
   test('내용물이 바뀌면 같은 행이 갱신된다', async () => {
     const proj = join(artifactsDir, 'gen-app');
     mkdirSync(proj, { recursive: true });
+    writeFileSync(join(proj, 'package.json'), '{}');
     writeFileSync(join(proj, 'a.txt'), 'one');
     await sweep(store, reader);
     const first = store.db.query('SELECT id, content_hash, bundle_files FROM artifacts WHERE bundle_files IS NOT NULL').get();
@@ -282,7 +283,7 @@ describe('번들 — 프로젝트 폴더를 한 줄로', () => {
     const second = store.db.query('SELECT id, content_hash, bundle_files FROM artifacts WHERE bundle_files IS NOT NULL').get();
 
     expect(second.id).toBe(first.id);
-    expect(second.bundle_files).toBe(2);
+    expect(second.bundle_files).toBe(3);
     expect(second.content_hash).not.toBe(first.content_hash);
   });
 
@@ -305,5 +306,96 @@ describe('번들 — 프로젝트 폴더를 한 줄로', () => {
 
     expect(store.db.query('SELECT COUNT(*) n FROM artifacts WHERE bundle_files IS NOT NULL').get().n).toBe(0);
     expect(store.counts().artifacts).toBe(1);
+  });
+});
+
+describe('작은 폴더는 접지 않는다', () => {
+  const names = () => store.db.query('SELECT file_name FROM artifacts ORDER BY file_name').all().map((r) => r.file_name);
+
+  test('산출물 몇 개를 담은 폴더는 파일로 올라온다 — 한 줄 뒤로 사라지던 실패', async () => {
+    const dir = join(artifactsDir, 'drawio-visual-audit');
+    mkdirSync(dir, { recursive: true });
+    for (const name of ['fidelity-aggregate.json', 'in-confluence.png', 'iv-confluence.png', 'tech-confluence.png']) {
+      writeFileSync(join(dir, name), name);
+    }
+    await sweep(store, reader);
+
+    expect(store.db.query('SELECT COUNT(*) n FROM artifacts WHERE bundle_files IS NOT NULL').get().n).toBe(0);
+    expect(names()).toEqual(['fidelity-aggregate.json', 'in-confluence.png', 'iv-confluence.png', 'tech-confluence.png']);
+  });
+
+  test('펴도 점 파일은 받지 않는다 — 최상위와 같은 규칙', async () => {
+    const dir = join(artifactsDir, 'drawio-visual-audit');
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, '.DS_Store'), 'x');
+    writeFileSync(join(dir, 'report.png'), 'x');
+    await sweep(store, reader);
+
+    expect(names()).toEqual(['report.png']);
+  });
+
+  test('파일 하나짜리 폴더도 그 파일이 된다', async () => {
+    mkdirSync(join(artifactsDir, 'drawio-fidelity-final', 'inner'), { recursive: true });
+    writeFileSync(join(artifactsDir, 'drawio-fidelity-final', 'inner', 'iv-inner.png'), 'x');
+    await sweep(store, reader);
+
+    expect(names()).toEqual(['iv-inner.png']);
+  });
+
+  test('파일이 많으면 접는다 — 대량으로 받은 첨부가 목록을 뒤덮지 않게', async () => {
+    const dir = join(artifactsDir, 'rack-mesh-drawio-latest-30');
+    mkdirSync(dir, { recursive: true });
+    for (let i = 0; i < BUNDLE_MIN_FILES; i++) writeFileSync(join(dir, `IN-${i}.drawio`), '<mxfile/>');
+    await sweep(store, reader);
+
+    expect(names()).toEqual(['rack-mesh-drawio-latest-30']);
+  });
+
+  test('프로젝트 표지가 있으면 파일이 적어도 접는다 — 스캐폴딩은 산출물이 아니다', async () => {
+    const dir = join(artifactsDir, 'gen-app');
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, 'package.json'), '{}');
+    writeFileSync(join(dir, 'index.mjs'), 'x');
+    await sweep(store, reader);
+
+    expect(names()).toEqual(['gen-app']);
+  });
+});
+
+describe('세션이 아는 제목은 files_changed 가 없어도 붙는다', () => {
+  test('파일은 썼는데 그 기록이 없는 세션도 제목과 공급자를 갖는다 — 트리에서 익명 더미가 되던 실패', async () => {
+    writeFileSync(join(artifactsDir, 'note.md'), '내용');
+    // 세션은 있고 제목도 있는데 files_changed 가 빈 경우. 보강의 조인으로는 제목을 못 얻는다.
+    buildStateDb([{ filesChanged: JSON.stringify([]) }]);
+
+    await sweep(store, reader);
+    const [origin] = store.originsOf(store.byPathKey(nfc(join(artifactsDir, 'note.md'))).id);
+    expect([origin.session_title, origin.provider]).toEqual(['테스트 세션', 'claude-code']);
+  });
+
+  test('Aside DB 에 없는 세션은 제목 없이 남는다 — 지어내지 않는다', async () => {
+    writeFileSync(join(artifactsDir, 'orphan.md'), '내용');
+    await sweep(store, reader);
+    const [origin] = store.originsOf(store.byPathKey(nfc(join(artifactsDir, 'orphan.md'))).id);
+    expect([origin.session_title, origin.provider]).toEqual([null, null]);
+  });
+});
+
+describe('폴더를 파일로 넘기지 않는다 — sweep_failed EISDIR 의 원인', () => {
+  test('보강이 산출물 표시가 붙은 폴더를 만나도 수집이 멈추지 않는다', async () => {
+    // 에이전트가 artifacts/ 안에 폴더를 만들고 state.db 가 거기에 산출물 표시를 붙인 경우.
+    mkdirSync(join(artifactsDir, 'gen-app'), { recursive: true });
+    buildStateDb([{ filesChanged: JSON.stringify([{ path: 'artifacts/gen-app', type: 'write', artifact: { sizeBytes: 12 } }]) }]);
+
+    const stats = await enrich(store, reader);
+    expect(stats.widened).toBe(0);
+    expect(store.byPathKey(nfc(join(artifactsDir, 'gen-app')))).toBeNull();
+  });
+
+  test('작업공간 문서 수집이 폴더를 건너뛴다 — fs.watch 는 폴더 생성도 알린다', async () => {
+    const docs = join(dir, 'repo', 'docs.md');
+    mkdirSync(docs, { recursive: true });
+    expect(await ingestWorkspaceDoc(store, docs, join(dir, 'repo'))).toEqual({ rule: 'skipped-not-file' });
+    expect(store.counts().artifacts).toBe(0);
   });
 });

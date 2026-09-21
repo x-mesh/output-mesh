@@ -216,3 +216,47 @@ describe('분류를 store 가 파생한다', () => {
     expect([row.ext, row.kind]).toEqual(['swift', 'code']);
   });
 });
+
+describe('빈 페이지를 재보고 회수한다', () => {
+  const rows = (n) => {
+    for (let i = 0; i < n; i++) {
+      const id = seed({ pathKey: `/s/artifacts/${i}.md`, absPath: `/s/artifacts/${i}.md`, fileName: `${i}.md`, contentHash: String(i) });
+      store.upsertSearchDoc(id, { name: `${i}.md`, path: `/s/artifacts/${i}.md`, body: 'x'.repeat(4000), meta: null, bodyState: 'indexed', title: `t${i}` });
+    }
+  };
+
+  test('파일 크기와 빈 자리를 같은 단위로 준다', () => {
+    rows(20);
+    const { bytes, freeBytes, freeRatio } = store.storage();
+    expect(bytes).toBeGreaterThan(0);
+    expect(freeBytes).toBeLessThanOrEqual(bytes);
+    expect(freeRatio).toBeCloseTo(freeBytes / bytes, 10);
+  });
+
+  test('지운 자리는 회수 전까지 파일에 남는다', () => {
+    rows(200);
+    const full = store.storage().bytes;
+    store.db.query('DELETE FROM artifacts').run();
+    const emptied = store.storage();
+    // 행을 지워도 파일은 그대로다. auto_vacuum 이 꺼져 있어 빈 페이지로만 표시된다.
+    expect(emptied.bytes).toBe(full);
+    expect(emptied.freeRatio).toBeGreaterThan(0.3);
+
+    const { before, after } = store.compact();
+    expect(before).toBe(full);
+    expect(after).toBeLessThan(before);
+    expect(store.storage().freeRatio).toBe(0);
+  });
+
+  test('회수해도 남은 행과 사용자 데이터는 그대로다 — VACUUM 이 rowid 를 다시 매긴다', () => {
+    rows(50);
+    const keep = store.byPathKey('/s/artifacts/7.md').id;
+    store.setState('cursor.scanned_until', '1234');
+    store.db.query('DELETE FROM artifacts WHERE path_key <> ?').run('/s/artifacts/7.md');
+
+    store.compact();
+    expect(store.counts().artifacts).toBe(1);
+    expect(store.byPathKey('/s/artifacts/7.md').id).toBe(keep);
+    expect(store.getState('cursor.scanned_until')).toBe('1234');
+  });
+});

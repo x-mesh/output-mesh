@@ -17,13 +17,13 @@ describe('스피너', () => {
   test('터미널이 아니면 제어 문자 없이 단계가 바뀔 때만 한 줄씩 쓴다 — 로그 파일이 숫자로 뒤덮이지 않게', () => {
     const pipe = sink(false);
     const spinner = createSpinner(pipe);
-    spinner.start('수집 준비 중');
-    spinner.update('Codex 로그 읽는 중 1 MB', 'Codex 로그 읽는 중');
-    spinner.update('Codex 로그 읽는 중 2 MB', 'Codex 로그 읽는 중');
-    spinner.update('본문 색인 중 1/3', '본문 색인 중');
-    spinner.stop('수집 완료');
+    spinner.start('Preparing to collect');
+    spinner.update('Reading Codex logs 1 MB', 'Reading Codex logs');
+    spinner.update('Reading Codex logs 2 MB', 'Reading Codex logs');
+    spinner.update('Indexing text 1/3', 'Indexing text');
+    spinner.stop('Collected');
 
-    expect(pipe.out).toEqual(['수집 준비 중\n', 'Codex 로그 읽는 중\n', '본문 색인 중\n', '수집 완료\n']);
+    expect(pipe.out).toEqual(['Preparing to collect\n', 'Reading Codex logs\n', 'Indexing text\n', 'Collected\n']);
     expect(pipe.out.join('')).not.toContain(ESC);
   });
 
@@ -31,21 +31,21 @@ describe('스피너', () => {
     const tty = sink(true);
     let clock = 0;
     const spinner = createSpinner(tty, { frameMs: 80, now: () => clock });
-    spinner.start('수집 준비 중');
+    spinner.start('Preparing to collect');
     const afterStart = tty.out.length;
 
     clock = 40;
-    spinner.update('너무 이른 보고');
+    spinner.update('too soon');
     expect(tty.out.length).toBe(afterStart);
 
     clock = 120;
-    spinner.update('Codex 로그 읽는 중');
-    expect(tty.out.at(-1)).toContain('Codex 로그 읽는 중');
+    spinner.update('Reading Codex logs');
+    expect(tty.out.at(-1)).toContain('Reading Codex logs');
 
-    spinner.stop('수집 완료');
+    spinner.stop('Collected');
     expect(tty.out.join('')).toContain(`${ESC}[?25l`);
     expect(tty.out.at(-2)).toContain(`${ESC}[?25h`);
-    expect(tty.out.at(-1)).toBe('수집 완료\n');
+    expect(tty.out.at(-1)).toBe('Collected\n');
   });
 
   test('진행 문구', () => {
@@ -54,7 +54,7 @@ describe('스피너', () => {
     const [line, step] = collectProgressText({ step: 'logs', source: 'codex', done: 1024 ** 3, total: 3 * 1024 ** 3, files: 412, fileTotal: 1256 });
     expect(line).toContain('1.0 GB / 3.0 GB');
     expect(line).toContain('412/1,256');
-    expect(step).toBe('Codex 로그 읽는 중 (1,256개, 3.0 GB)');
+    expect(step).toBe('Reading Codex logs (1,256 files, 3.0 GB)');
   });
 });
 
@@ -127,5 +127,21 @@ describe('수집 진행 보고', () => {
 
     expect(firstRun).toBeGreaterThan(0);
     expect(events.length).toBe(firstRun);
+  });
+});
+
+describe('닫힌 출력', () => {
+  test('파이프가 끊겨도 수집을 죽이지 않는다 — EPIPE 가 sweep_failed 로 올라오던 실패', () => {
+    const broken = {
+      isTTY: true,
+      write() {
+        throw Object.assign(new Error('EPIPE: broken pipe, write'), { code: 'EPIPE' });
+      },
+    };
+    const spinner = createSpinner(broken);
+    expect(() => spinner.note('안내')).not.toThrow();
+    expect(() => spinner.start('Preparing to collect')).not.toThrow();
+    expect(() => spinner.update('진행')).not.toThrow();
+    expect(() => spinner.stop()).not.toThrow();
   });
 });
