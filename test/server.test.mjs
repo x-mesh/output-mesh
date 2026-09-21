@@ -6,7 +6,7 @@ import { CatalogStore } from '../lib/store.mjs';
 import { AsideReader } from '../lib/aside-reader.mjs';
 import { collectOnce } from '../lib/collector.mjs';
 import { startServer } from '../lib/server.mjs';
-import { nfc } from '../lib/paths.mjs';
+import { MAX_DRAWIO_BYTES, MAX_PREVIEW_BYTES, nfc } from '../lib/paths.mjs';
 
 const PORT = 19857;
 const base = `http://127.0.0.1:${PORT}`;
@@ -15,6 +15,9 @@ let dir;
 let store;
 let server;
 let htmlId;
+let drawioId;
+let bigDrawioId;
+let bundleId;
 
 const get = (path) => fetch(base + path);
 const post = (path, body) =>
@@ -27,12 +30,30 @@ beforeAll(async () => {
   writeFileSync(join(artifactsDir, 'sketch.html'), '<html><body><h1>스케치</h1><script>var x=1</script></body></html>');
   writeFileSync(join(artifactsDir, 'note.md'), '한글 본문 텍스트');
   writeFileSync(join(artifactsDir, 'App.swift'), 'struct App {}');
+  // 2MB 를 넘지만 drawio 상한 안. 텍스트 상한을 그대로 쓰면 여기서 413 이 난다.
+  writeFileSync(join(artifactsDir, 'big.drawio'),
+    '<mxfile><diagram><mxGraphModel><root>'
+    + '<mxCell id="1" value="큰 도형" style="shape=image"/>'.repeat(40000)
+    + '</root></mxGraphModel></diagram></mxfile>');
+  writeFileSync(join(artifactsDir, 'flow.drawio'),
+    '<mxfile><diagram name="main"><mxGraphModel><root>'
+    + '<mxCell id="2" value="&lt;b&gt;결제 서버&lt;/b&gt;" style="shape=image;fillColor=none"/>'
+    + '</root></mxGraphModel></diagram></mxfile>');
+  const bundleDir = join(artifactsDir, 'rack-mesh-drawio-spaces');
+  mkdirSync(join(bundleDir, 'inner'), { recursive: true });
+  for (let i = 0; i < 12; i++) {
+    writeFileSync(join(bundleDir, `IN-${i}.drawio`), `<mxfile><diagram><mxGraphModel><root><mxCell value="망 ${i}"/></root></mxGraphModel></diagram></mxfile>`);
+  }
+  writeFileSync(join(bundleDir, 'inner', 'note.md'), '구성 파일 안의 문서');
   writeFileSync(join(dir, 'secret.txt'), 'TOP SECRET');
 
   store = new CatalogStore(join(dir, 'c.db'));
   const reader = new AsideReader(join(dir, 'u0'));
   await collectOnce(store, reader);
   htmlId = store.byPathKey(nfc(join(artifactsDir, 'sketch.html'))).id;
+  drawioId = store.byPathKey(nfc(join(artifactsDir, 'flow.drawio'))).id;
+  bigDrawioId = store.byPathKey(nfc(join(artifactsDir, 'big.drawio'))).id;
+  bundleId = store.byPathKey(nfc(bundleDir)).id;
   server = await startServer({ store, watcher: null, readers: [reader] }, { port: PORT });
 });
 
@@ -166,5 +187,69 @@ describe('API', () => {
 
   test('없는 아티팩트는 404 다', async () => {
     expect((await get('/api/artifact/424242')).status).toBe(404);
+  });
+});
+
+describe('drawio 는 읽기 전용 뷰어로 그린다', () => {
+  test('뷰어 페이지는 도형 XML 과 프레임 스크립트를 함께 준다', async () => {
+    const res = await get(`/artifact/${drawioId}/drawio`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toContain('text/html');
+    const body = await res.text();
+    expect(body).toContain('/drawio-frame.js');
+    expect(body).toContain('mxGraphModel');
+  });
+
+  test("스크립트 출처를 'self' 가 아니라 실제 주소로 적는다 — 샌드박스 오리진은 불투명하다", async () => {
+    const csp = (await get(`/artifact/${drawioId}/drawio`)).headers.get('content-security-policy');
+    expect(csp).toContain(`script-src ${base}`);
+    expect(csp).not.toContain("script-src 'self'");
+    expect(csp).toContain("connect-src 'none'");
+  });
+
+  test('2MB 를 넘어도 그린다 — 실측 306개 중 5개가 텍스트 상한 바로 위에 있다', async () => {
+    const size = store.db.query('SELECT size_bytes n FROM artifacts WHERE id = ?').get(bigDrawioId).n;
+    expect(size).toBeGreaterThan(MAX_PREVIEW_BYTES);
+    expect(size).toBeLessThan(MAX_DRAWIO_BYTES);
+    expect((await get(`/artifact/${bigDrawioId}/drawio`)).status).toBe(200);
+  });
+
+  test('drawio 가 아닌 아티팩트에는 뷰어를 내주지 않는다', async () => {
+    expect((await get(`/artifact/${htmlId}/drawio`)).status).toBe(404);
+  });
+
+  test('도형 이름이 본문으로 색인돼 검색에 걸린다', () => {
+    const doc = store.db.query('SELECT body, body_state FROM search_docs WHERE artifact_id = ?').get(drawioId);
+    expect(doc.body_state).toBe('indexed');
+    expect(doc.body).toBe('결제 서버');
+  });
+});
+
+describe('접힌 번들의 구성 파일을 연다', () => {
+  test('상세가 구성 파일마다 종류와 확장자를 함께 준다', async () => {
+    const detail = await (await get(`/api/artifact/${bundleId}`)).json();
+    expect(detail.bundle_files).toBe(13);
+    expect(detail.members).toContainEqual({ path: 'IN-0.drawio', ext: 'drawio', kind: 'markup' });
+    expect(detail.members).toContainEqual({ path: 'inner/note.md', ext: 'md', kind: 'text' });
+  });
+
+  test('구성 파일의 본문과 도형을 그대로 내준다', async () => {
+    const raw = await get(`/artifact/${bundleId}/raw?path=${encodeURIComponent('inner/note.md')}`);
+    expect(raw.status).toBe(200);
+    expect(await raw.text()).toBe('구성 파일 안의 문서');
+
+    const view = await get(`/artifact/${bundleId}/drawio?path=${encodeURIComponent('IN-3.drawio')}`);
+    expect(view.status).toBe(200);
+    expect(await view.text()).toContain('망 3');
+  });
+
+  test('구성 목록에 없는 이름은 거부한다 — 클라이언트 문자열이 경로가 되지 않는다', async () => {
+    for (const bad of ['../../../secret.txt', '../secret.txt', 'IN-0.drawio/../../secret.txt', 'nope.drawio']) {
+      expect((await get(`/artifact/${bundleId}/raw?path=${encodeURIComponent(bad)}`)).status).toBe(404);
+    }
+  });
+
+  test('번들이 아닌 아티팩트에는 구성 파일이 없다', async () => {
+    expect((await get(`/artifact/${htmlId}/raw?path=${encodeURIComponent('note.md')}`)).status).toBe(404);
   });
 });

@@ -45,6 +45,8 @@ const state = {
   facets: null,
   overview: null,
   rawMode: false,
+  // 접힌 번들에서 열어 둔 구성 파일. 다른 아티팩트를 고르면 비운다.
+  member: null,
   showAllOrigins: false,
   searchOpen: {},
   detail: null,
@@ -57,6 +59,8 @@ const state = {
 // 선택할 때 트리를 다시 그리면 스크롤과 포커스가 튄다. 노드를 들고 있다가 속성만 바꾼다.
 // 에이전트·앱별로 묶으면 두 에이전트가 만든 파일은 두 묶음에 모두 있으므로 id 하나에 노드가 여럿이다.
 const rowNodes = new Map();
+// 번들 id → 구성 파일 목록. 트리를 다시 그려도 다시 받지 않는다.
+const bundleMembers = new Map();
 const addRowNode = (id, node) => rowNodes.set(id, [...(rowNodes.get(id) ?? []), node]);
 const scrollToRow = (id) => rowNodes.get(id)?.[0]?.scrollIntoView({ block: 'nearest' });
 
@@ -751,6 +755,7 @@ function setOpen(key, open) {
 }
 
 function renderTree({ keepScroll = false } = {}) {
+
   const list = $('rows');
   const scroll = list.scrollTop;
   const focused = state.visible.find((entry) => entry.item === document.activeElement)?.id;
@@ -810,20 +815,29 @@ function appendFile(list, row, level, leaf = null) {
   // 검색 결과 줄은 트리가 말해 주던 위치를 스스로 말해야 하고, 왜 맞았는지를 덧붙인다.
   const result = hasQuery();
   const text = result ? highlighted : (value) => [value];
-  const entry = { id: row.id, type: 'file', row, level };
+  // 접힌 번들은 트리에서 직접 편다. 상세를 열어야만 안을 볼 수 있으면 탐색기의 몫이 반쪽이 된다.
+  const bundle = Boolean(row.bundle_files) && !result;
+  const node = bundle ? { key: `bundle:${row.id}` } : null;
+  const open = bundle && isOpen(node, level);
+  const entry = { id: row.id, type: 'file', row, level, node, bundle };
   entry.item = el('li', {
-    className: 'tree-item file',
+    className: `tree-item file${bundle ? ' expandable' : ''}`,
     tabIndex: -1,
     attrs: {
       role: result ? 'option' : 'treeitem',
       'aria-level': result ? null : level + 1,
-      'aria-selected': String(state.selected === row.id),
+      'aria-expanded': bundle ? String(open) : null,
+      'aria-selected': String(state.selected === row.id && !state.member),
     },
-    onclick: () => {
+    // 폴더와 같게 행 전체가 편다. 꺾쇠만 펴고 이름은 오른쪽만 바꾸면 한 줄에 동작이 둘이라
+    // 어느 쪽을 눌러야 하는지 알 수 없다. 번들은 아티팩트이기도 해서 상세도 함께 연다.
+    onclick: async () => {
       focusEntry(entry);
+      if (bundle) await toggleBundle(entry);
       void select(row.id);
     },
   },
+    bundle && icon('chevron', 'chevron'),
     icon(row.bundle_files ? 'bundle' : KIND_ICON[row.kind] ?? 'doc', 'kind'),
     el('div', { className: 'file-text' },
       el('div', { className: 'file-line' },
@@ -841,7 +855,118 @@ function appendFile(list, row, level, leaf = null) {
   addRowNode(row.id, entry.item);
   state.visible.push(entry);
   list.append(entry.item);
+  if (open) for (const member of bundleMembers.get(row.id) ?? []) appendMember(list, row, member, level + 1);
 }
+
+/** 구성 파일은 아티팩트가 아니라 번들 안의 경로다. 고르면 그 번들을 열되 그 파일을 보인다. */
+function appendMember(list, row, member, level) {
+  const active = state.selected === row.id && state.member?.path === member.path;
+  const entry = { id: `${row.id}:${member.path}`, type: 'member', row, member, level };
+  entry.item = el('li', {
+    className: 'tree-item file member',
+    tabIndex: -1,
+    attrs: { role: 'treeitem', 'aria-level': level + 1, 'aria-selected': String(active) },
+    onclick: () => {
+      focusEntry(entry);
+      void select(row.id, { member });
+    },
+  },
+    icon(KIND_ICON[member.kind] ?? 'doc', 'kind'),
+    el('div', { className: 'file-text' },
+      el('div', { className: 'file-line' }, el('span', { className: 'file-name' }, member.path))));
+  entry.item.style.setProperty('--level', level);
+  state.visible.push(entry);
+  list.append(entry.item);
+}
+
+/** 구성 목록은 상세에만 있다. 처음 펼 때 한 번 받아 두고 그 뒤로는 트리가 바로 그린다. */
+async function toggleBundle(entry, open = !isOpen(entry.node, entry.level)) {
+  if (open && !bundleMembers.has(entry.row.id)) {
+    const detail = await api(`/api/artifact/${entry.row.id}`);
+    bundleMembers.set(entry.row.id, detail?.members ?? []);
+  }
+  setOpen(entry.node.key, open);
+  renderTree({ keepScroll: true });
+  const again = state.visible.find((e) => e.id === entry.id);
+  if (again) focusEntry(again);
+}
+
+/**
+ * 탐색기의 우클릭 메뉴. 새 동작을 만들지 않고 상세 도구막대와 검사 패널에 이미 있는 것만 그 자리로
+ * 가져온다. 키보드에서도 열려야 해서(DESIGN.md) Shift+F10 과 메뉴 키를 함께 받는다.
+ */
+let openMenu = null;
+
+function closeMenu() {
+  openMenu?.remove();
+  openMenu = null;
+}
+
+function menuItems(entry) {
+  const { row } = entry;
+  if (entry.type === 'member') {
+    return [
+      [t('action.reveal'), () => post(`/api/artifact/${row.id}/reveal`, {})],
+      [t('action.copyPath'), () => navigator.clipboard.writeText(`${row.abs_path}/${entry.member.path}`)],
+    ];
+  }
+  const isFinal = row.state === 'final';
+  return [
+    [t(isFinal ? 'action.unmarkFinal' : 'action.markFinal'), async () =>
+      refreshKeepingSelection(await post(`/api/artifact/${row.id}/state`, { state: isFinal ? 'discovered' : 'final' }))],
+    [t(row.favorite ? 'action.unfavorite' : 'action.favorite'), async () =>
+      refreshKeepingSelection(await post(`/api/artifact/${row.id}/favorite`, { on: !row.favorite }))],
+    [t('action.reveal'), () => post(`/api/artifact/${row.id}/reveal`, {})],
+    [t('action.copyPath'), () => navigator.clipboard.writeText(row.abs_path)],
+  ];
+}
+
+function showMenu(entry, x, y) {
+  closeMenu();
+  const items = menuItems(entry);
+  if (items.length === 0) return;
+  const menu = el('div', { className: 'context-menu', attrs: { role: 'menu' } },
+    ...items.map(([label, run]) => el('button', {
+      type: 'button',
+      attrs: { role: 'menuitem' },
+      onclick: () => {
+        closeMenu();
+        void run();
+      },
+    }, label)));
+  document.body.append(menu);
+  openMenu = menu;
+  // 화면 밖으로 나가면 반대쪽으로 붙인다. 커서가 오른쪽 끝에 있을 때 메뉴가 잘린다.
+  const { width, height } = menu.getBoundingClientRect();
+  menu.style.left = `${Math.min(x, window.innerWidth - width - 4)}px`;
+  menu.style.top = `${Math.min(y, window.innerHeight - height - 4)}px`;
+  menu.querySelector('button')?.focus();
+}
+
+document.addEventListener('pointerdown', (event) => {
+  if (openMenu && !openMenu.contains(event.target)) closeMenu();
+}, true);
+document.addEventListener('keydown', (event) => {
+  if (openMenu && event.key === 'Escape') closeMenu();
+});
+window.addEventListener('blur', closeMenu);
+
+$('rows').addEventListener('contextmenu', (event) => {
+  const entry = state.visible.find((e) => e.item.contains(event.target));
+  if (!entry || entry.type === 'folder') return;
+  event.preventDefault();
+  focusEntry(entry);
+  showMenu(entry, event.clientX, event.clientY);
+});
+
+$('rows').addEventListener('keydown', (event) => {
+  if (event.key !== 'ContextMenu' && !(event.key === 'F10' && event.shiftKey)) return;
+  const entry = state.visible.find((e) => e.item === document.activeElement);
+  if (!entry || entry.type === 'folder') return;
+  event.preventDefault();
+  const box = entry.item.getBoundingClientRect();
+  showMenu(entry, box.left + box.width / 3, box.bottom);
+});
 
 function focusEntry(entry) {
   for (const other of state.visible) other.item.tabIndex = -1;
@@ -890,8 +1015,12 @@ $('rows').addEventListener('keydown', (event) => {
     const target = state.visible[Math.max(0, Math.min(state.visible.length - 1, index))];
     focusEntry(target);
     if (target.type === 'file') void select(target.id);
+    else if (target.type === 'member') void select(target.row.id, { member: target.member });
   };
-  const open = current.type === 'folder' && isOpen(current.node, current.level);
+  // 번들 행도 펴진다. 펴고 접는 규칙은 폴더와 같고, 여는 방법만 다르다.
+  const expand = current.type === 'folder' ? toggleFolder : toggleBundle;
+  const expandable = current.type === 'folder' || current.bundle;
+  const open = expandable && isOpen(current.node, current.level);
 
   switch (event.key) {
     case 'ArrowDown': go(at + 1); break;
@@ -899,22 +1028,25 @@ $('rows').addEventListener('keydown', (event) => {
     case 'Home': go(0); break;
     case 'End': go(state.visible.length - 1); break;
     case 'ArrowRight':
-      if (current.type !== 'folder') return;
+      if (!expandable) return;
       if (open) go(at + 1);
-      else toggleFolder(current, true);
+      else void expand(current, true);
       break;
     case 'ArrowLeft': {
       if (open) {
-        toggleFolder(current, false);
+        void expand(current, false);
         break;
       }
-      const parent = state.visible.slice(0, at).reverse().find((e) => e.type === 'folder' && e.level < current.level);
+      const parent = state.visible.slice(0, at).reverse().find((e) => (e.type === 'folder' || e.bundle) && e.level < current.level);
       if (parent) focusEntry(parent);
       break;
     }
     case 'Enter':
     case ' ':
       if (current.type === 'folder') toggleFolder(current);
+      else if (current.type === 'member') void select(current.row.id, { member: current.member });
+      // 마우스로 누른 것과 같아야 한다. 번들은 펴면서 상세도 연다.
+      else if (current.bundle) void toggleBundle(current).then(() => select(current.id));
       else void select(current.id);
       break;
     default:
@@ -971,11 +1103,20 @@ async function refresh({ live = false } = {}) {
 
 // ── 선택 · 상세 ─────────────────────────────────────────────────────────
 
+/**
+ * 선택 표시만 고친다. 여기서 트리를 다시 그리면 방금 포커스를 준 행이 문서에서 사라져
+ * 방향키가 현재 위치를 잃는다 — 구성 행으로 내려가면 그 뒤로 아래 이동이 멈췄다.
+ */
 function markSelected(id) {
-  for (const [rowId, nodes] of rowNodes) for (const node of nodes) node.setAttribute('aria-selected', String(rowId === id));
+  const onMember = Boolean(state.member);
+  for (const [rowId, nodes] of rowNodes) for (const node of nodes) node.setAttribute('aria-selected', String(rowId === id && !onMember));
+  for (const entry of state.visible) {
+    if (entry.type !== 'member') continue;
+    entry.item.setAttribute('aria-selected', String(entry.row.id === id && state.member?.path === entry.member.path));
+  }
 }
 
-async function select(id, { reveal = false, fromRoute = false } = {}) {
+async function select(id, { reveal = false, fromRoute = false, member = null } = {}) {
   // 개요에서 파일로 가는 건 기록을 쌓고, 파일에서 파일로는 바꿔 쓴다.
   if (!fromRoute) setRoute(`#/a/${id}`, { replace: state.view === 'detail' });
   const wasWide = $('layout').hasAttribute('data-wide');
@@ -983,6 +1124,7 @@ async function select(id, { reveal = false, fromRoute = false } = {}) {
   updateWide();
   state.selected = id;
   state.rawMode = false;
+  state.member = member;
   state.showAllOrigins = false;
   markSelected(id);
   // 넓은 타임라인이 왼쪽 칸으로 접히면 카드 높이가 달라져 고른 파일이 화면 밖으로 밀린다.
@@ -1017,7 +1159,9 @@ const isMarkdownDoc = (detail) => (detail.kind === 'text' || detail.kind === 'me
 const FRAME_STYLE = `
   :root { color-scheme: light; }
   :root[data-theme="dark"] { color-scheme: dark; }
-  body { margin: 0 auto; max-width: 72ch; padding: 28px 32px 64px;
+  /* 찾은 뒤에는 내용이 화면을 가진다. 72ch 는 1250px 프레임에서 좌우로 340px 씩을 버렸다.
+     상한은 아주 넓은 화면에서 한 줄이 끝없이 길어지는 것만 막는다. */
+  body { box-sizing: border-box; margin: 0 auto; max-width: 1080px; padding: 28px 40px 64px;
          font: 14px/1.7 -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", sans-serif;
          color: #1c1c1e; background: #fff; word-break: break-word; }
   :root[data-theme="dark"] body { color: #ececf1; background: #1c1c1e; }
@@ -1123,37 +1267,87 @@ function markdownFrame(source, title) {
   return frame;
 }
 
+/**
+ * 접힌 번들은 목록만 보이고 안을 볼 방법이 없었다. 이름을 누르면 그 자리에서 그 파일을 연다.
+ * 아티팩트 자신과 같은 미리보기 규칙을 쓰도록 필요한 것만 추려서 넘긴다.
+ */
+function previewSource(detail) {
+  const member = state.member;
+  if (!member) return { kind: detail.kind, ext: detail.ext, name: detail.file_name, query: '', allowScripts: detail.allow_scripts };
+  // 구성 파일에는 스크립트 허용 토글이 없다. 서버도 꺼진 채로 내준다.
+  return { kind: member.kind, ext: member.ext, name: member.path, query: `?path=${encodeURIComponent(member.path)}`, allowScripts: 0 };
+}
+
+function bundleList(detail) {
+  const members = detail.members ?? [];
+  if (members.length === 0) return el('pre', { className: 'preview-text' }, t('preview.bundleFiles', { n: detail.bundle_files }));
+  return el('ul', { className: 'members' }, ...members.map((member) =>
+    el('li', {}, el('button', {
+      type: 'button',
+      className: 'link mono',
+      onclick: () => {
+        state.member = member;
+        render(detail);
+      },
+    }, member.path))));
+}
+
 function previewFor(detail) {
-  const src = `/artifact/${detail.id}/raw`;
   if (detail.missing_at) {
     return el('div', { className: 'preview-note' },
       el('p', {}, t('preview.missing')),
       el('p', { className: 'hint' }, t('preview.missingNote')));
   }
-  if (detail.bundle_files) {
-    return el('pre', { className: 'preview-text' }, (detail.members ?? []).join('\n') || t('preview.bundleFiles', { n: detail.bundle_files }));
-  }
-  if (TEXT_KINDS.has(detail.kind)) {
-    return el('div', { className: 'preview-fill', id: 'text-preview' }, el('p', { className: 'preview-note hint' }, t('preview.loading')));
-  }
-  switch (detail.kind) {
-    case 'sheet':
-      return sheetPreview(detail);
-    case 'image':
-      return el('div', { className: 'preview-image' }, el('img', { src, alt: detail.file_name, loading: 'lazy' }));
-    case 'pdf':
-      return el('embed', { className: 'preview-fill', src, type: 'application/pdf' });
-    case 'markup': {
-      const frame = el('iframe', { className: 'preview-fill', src, title: detail.file_name, referrerPolicy: 'no-referrer' });
-      // allow-same-origin 을 주지 않는다. 불투명 오리진이라 카탈로그 API 나 다른 아티팩트에 닿지 못한다.
-      frame.setAttribute('sandbox', detail.allow_scripts ? 'allow-scripts' : '');
+  if (detail.bundle_files && !state.member) return bundleList(detail);
+
+  const source = previewSource(detail);
+  const src = `/artifact/${detail.id}/raw${source.query}`;
+  const pane = () => {
+    if (TEXT_KINDS.has(source.kind)) {
+      return el('div', { className: 'preview-fill', id: 'text-preview' }, el('p', { className: 'preview-note hint' }, t('preview.loading')));
+    }
+    // 확장자로 먼저 가른다. drawio 는 종류가 마크업이지만 원본을 그대로 띄우면 받기만 된다.
+    if (source.ext === 'drawio') {
+      const theme = document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light';
+      const separator = source.query ? '&' : '?';
+      const frame = el('iframe', { className: 'preview-fill', src: `/artifact/${detail.id}/drawio${source.query}${separator}theme=${theme}`, title: source.name, referrerPolicy: 'no-referrer' });
+      // 뷰어가 돌아야 하므로 스크립트는 열되 allow-same-origin 은 주지 않는다.
+      frame.setAttribute('sandbox', 'allow-scripts');
       return frame;
     }
-    default:
-      return el('div', { className: 'preview-note' },
-        el('p', {}, t('preview.unsupported')),
-        el('button', { type: 'button', onclick: () => post(`/api/artifact/${detail.id}/reveal`, {}) }, t('action.reveal')));
-  }
+    switch (source.kind) {
+      case 'sheet':
+        return sheetPreview(detail);
+      case 'image':
+        return el('div', { className: 'preview-image' }, el('img', { src, alt: source.name, loading: 'lazy' }));
+      case 'pdf':
+        return el('embed', { className: 'preview-fill', src, type: 'application/pdf' });
+      case 'markup': {
+        const frame = el('iframe', { className: 'preview-fill', src, title: source.name, referrerPolicy: 'no-referrer' });
+        // allow-same-origin 을 주지 않는다. 불투명 오리진이라 카탈로그 API 나 다른 아티팩트에 닿지 못한다.
+        frame.setAttribute('sandbox', source.allowScripts ? 'allow-scripts' : '');
+        return frame;
+      }
+      default:
+        return el('div', { className: 'preview-note' },
+          el('p', {}, t('preview.unsupported')),
+          el('button', { type: 'button', onclick: () => post(`/api/artifact/${detail.id}/reveal`, {}) }, t('action.reveal')));
+    }
+  };
+
+  if (!state.member) return pane();
+  return el('div', { className: 'member-view' },
+    el('div', { className: 'member-bar' },
+      el('button', {
+        type: 'button',
+        className: 'link',
+        onclick: () => {
+          state.member = null;
+          render(detail);
+        },
+      }, t('action.backToBundle')),
+      el('span', { className: 'mono dim' }, state.member.path)),
+    pane());
 }
 
 // ── 스프레드시트 ─────────────────────────────────────────────────────────
@@ -1355,15 +1549,16 @@ function render(detail) {
 
   $('detail').replaceChildren(head, body);
 
-  if (TEXT_KINDS.has(detail.kind) && !detail.missing_at && !detail.bundle_files) {
-    fetch(`/artifact/${detail.id}/raw`)
+  const source = previewSource(detail);
+  if (TEXT_KINDS.has(source.kind) && !detail.missing_at && (state.member || !detail.bundle_files)) {
+    fetch(`/artifact/${detail.id}/raw${source.query}`)
       .then((r) => r.text())
       .then((text) => {
         const box = document.getElementById('text-preview');
         if (!box || state.selected !== detail.id) return;
-        const rendered = MARKDOWN_EXT.has(detail.ext) && !state.rawMode;
+        const rendered = MARKDOWN_EXT.has(source.ext) && !state.rawMode;
         box.replaceChildren(rendered
-          ? markdownFrame(text, detail.file_name)
+          ? markdownFrame(text, source.name)
           : el('pre', { className: 'preview-text' }, ...highlighted(text, MAX_PREVIEW_MARKS)));
         box.querySelector('pre mark')?.scrollIntoView({ block: 'center' });
       })

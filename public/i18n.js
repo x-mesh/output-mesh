@@ -103,6 +103,7 @@
 
       'preview.missing': '원본 파일이 사라졌습니다.', 'preview.missingNote': '기록, 태그, 메모는 그대로 남아 있습니다.',
       'preview.bundleFiles': ({ n }) => `${num(n)}개 파일`,
+      'action.backToBundle': '← 구성 파일',
       'preview.loading': '불러오는 중…', 'preview.unsupported': '이 형식은 미리보기를 지원하지 않습니다.',
       'preview.loadFailed': '불러오지 못했습니다.',
       'sheet.empty': '보여줄 시트가 없습니다.',
@@ -276,6 +277,7 @@
 
       'preview.missing': 'The original file is gone.', 'preview.missingNote': 'Its record, tags, and notes are kept.',
       'preview.bundleFiles': ({ n }) => count(n, 'file', 'files'),
+      'action.backToBundle': '← Files',
       'preview.loading': 'Loading…', 'preview.unsupported': 'This format can’t be previewed.',
       'preview.loadFailed': 'Couldn’t load the file.',
       'sheet.empty': 'No sheets to show.',
