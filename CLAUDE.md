@@ -35,7 +35,7 @@ bun bin/output-mesh.mjs doctor          # 상태 점검
 | `lib/worktrees.mjs` | 작업공간이 어느 저장소의 것인가. `.git` 포인터만 읽는다 |
 | `lib/server.mjs` | HTTP API + 아티팩트 서빙 |
 | `public/` | 바닐라 ESM UI |
-| `public/vendor/` | 핀 고정한 브라우저 라이브러리 (marked.js) |
+| `public/vendor/` | 핀 고정한 브라우저 라이브러리 (marked.js, gridstack) |
 
 ### Key design decisions
 
@@ -67,6 +67,14 @@ bun bin/output-mesh.mjs doctor          # 상태 점검
 - **홈과 그 위의 `.git` 으로는 올라가지 않는다.** 홈에 dotfiles 저장소를 둔 머신에서는 저장소가 아닌 모든 폴더가 홈 하나로 접힌다.
 - **지워진 worktree 의 대응은 덮어쓰지 않는다.** 폴더가 없으면 다시 풀 수 없는데, 자기 자신으로 덮어쓰면 재시작마다 다시 갈라진다.
 - **`describe.mjs` 는 여전히 순수 함수다.** 디스크를 읽는 건 `worktrees.mjs` 이고, describe 는 `{ top, root }` 를 받아 계산만 한다.
+
+**개요는 위젯 격자다. 격자 엔진만 빌리고 생김새는 빌리지 않는다.** 자리와 크기는 `gridstack`(13.3.0, `public/vendor/`)이 맡고, 고른 배치는 `aoc.home.layout` 에 남는다. `PRODUCT.md` 의 안티레퍼런스는 "둥근 카드 격자"라는 **생김새**라서, 쉴 때 카드 테두리·그림자·애니메이션을 그리지 않으면 어긋나지 않는다. 경계는 끄는 동안에만 보인다.
+
+- **그리드를 다시 세우는 건 블록을 켜고 끌 때뿐이다.** 수집 알림이 30초마다 `renderHome` 을 부르는데 그때마다 `GridStack.init` 을 다시 하면 화면이 깜빡이고 끌던 손이 끊긴다. 틀은 두고 `fillBlocks` 가 `.block-body` 안만 갈아 끼운다.
+- **`handle: '.drag-handle'`.** 위젯 전체를 끌 수 있게 두면 피드 글자를 긁어 고를 수 없다.
+- **`alwaysShowResizeHandle: true`.** 기본값은 hover 때만 보인다. 작은 `구성` 링크 하나로는 아무도 못 찾았고, 같은 이유로 손잡이도 늘 보여야 한다.
+- **위젯이 쓰는 것만 받는다.** 최근 작업(`/api/activity`)과 수집 상태(`/api/status`)는 그 위젯이 켜져 있을 때만 부른다. 개요는 수집 알림마다 다시 그려져서, 안 보이는 위젯의 요청이 30초마다 쌓인다.
+- **키보드는 구성 패널이 맡는다.** 끌기와 크기 조절은 마우스만 닿으므로, 켜고 끄기 · 한 칸 이동 · 기본 배치 복원을 패널에 둔다. `PRODUCT.md` 의 "키보드로 끝까지 간다"를 이 경로가 지킨다.
 
 **목적이 둘이라 화면도 둘이다.** 큐레이션된 산출물을 찾는 일과 에이전트가 무엇을 했는지 보는 일은 같은 목록으로 섞이지 않는다.
 
