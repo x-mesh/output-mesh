@@ -6,6 +6,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project follows [Semantic Versioning](https://semver.org/). The version
 lives in `package.json`; `output-mesh --version` and the explorer footer show it.
 
+## [0.3.0] - 2026-09-21
+
+### Added
+
+- **collect:** read Cursor composer records and attach their files to the catalog
+- **preview:** show `.drawio` files in a read-only viewer with page navigation and zoom
+- **overview:** add a configurable widget grid and tab title notifications
+- **cli:** add the `compact` command to reclaim unused database pages
+
+### Changed
+
+- **collect:** group Aside sessions by session, restore session titles, and preserve multiple artifact origins
+- **collect:** group git worktrees under their main repository
+- **library:** add worktree locations, improved document titles, two-character search, and bundle members
+- **overview:** align search, feed, workspace, activity, and period filters
+- **cli:** show catalog status and use English terminal output
+
 ## [Unreleased]
 
 ### Changed
