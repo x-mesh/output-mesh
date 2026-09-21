@@ -172,6 +172,7 @@ bun bin/output-mesh.mjs start|stop|restart|status|uninstall
 - 목록과 사이드바는 같은 파라미터를 쓴다. `filtersFrom(url)`(서버)과 `searchParams()`(클라이언트)가 한 곳이다. 갈라지면 사이드바가 목록에 없는 것을 광고한다.
 - 정적 파일은 `cache-control: no-store` 로 보낸다. 검증자 없이 캐시되면 편집한 UI 가 새로고침에도 안 바뀌어, 자기 수정을 눈으로 확인할 수 없다.
 - 터미널 문구는 영어다. 화면과 달리 사전을 두지 않는다 — 서버 시작 화면은 무엇이 모였고 무엇을 하면 되는지(주소·`Ctrl-C`)만 적고, 볼 것이 있을 때만 줄을 늘린다(빠진 수집기, 회수할 빈 자리, 최근 한 시간의 수집 오류).
+- **배포는 태그가 끌고, 토큰은 어디에도 두지 않는다.** `git-kit ship` 이 단 `v*` 태그를 올리면 `.github/workflows/publish.yml` 이 npm 의 trusted publishing(OIDC)으로 올린다. npmjs.com 의 trusted publisher 설정에 적는 **워크플로 파일명이 이 파일 이름과 글자까지 같아야** 한다. 토큰으로 2FA 를 우회하는 방식은 2027-01 에 없어진다.
 - **상시 실행은 운영체제에 맡긴다.** `install` 이 LaunchAgent(macOS)나 systemd user unit(리눅스)을 쓰고 그 위의 명령을 부를 뿐이라, 실패하면 운영체제가 낸 말이 그대로 보인다. 계획은 `servicePlan` 순수 함수라 테스트가 실제 `LaunchAgents` 폴더를 건드리지 않는다. `bunx` 캐시처럼 다음 부팅에 없을 경로에서는 거부한다 — 서비스가 조용히 안 뜨는 것보다 낫다.
 - 포트가 막히면 **다른 포트로 옮기지 않고 멈춘다.** 같은 카탈로그에 두 서버가 붙으면 쓰기가 서로 막혀 수집이 `database is locked` 로 죽는다 — 실제로 그렇게 기록됐다. 대신 무엇을 하면 되는지 한 줄로 적는다.
 - 화면 문구는 `public/i18n.js` 사전에만 둔다(영어·한국어). `app.js` 에 한국어 문자열을 쓰면 `test/i18n.test.mjs` 가 잡는다. 서버는 값만 보내고 이름표는 화면이 붙인다.
