@@ -56,17 +56,23 @@ bun bin/output-mesh.mjs
 
 Codex and Claude Code do not keep artifacts anywhere special. Their logs record which paths they wrote, so output-mesh attaches provenance to files that are still in your repositories and leaves them where they are.
 
-The library shows documents, web pages, images, spreadsheets, and bundles. Source code and unknown formats are collected but hidden by default; pick them from the Kind filter when you need them. The "Just happened" feed hides them too and says how many it hid.
+The library shows documents, web pages, images, spreadsheets, and bundles. output-mesh also collects source code, agent notes, and unknown formats, but the library hides them. Agent notes are the memory files that Claude Code keeps in `~/.claude/projects/*/memory/`. If you need a hidden kind, select it in the Kind filter. The "Just happened" feed hides the same kinds and shows the hidden count.
+
+A git worktree counts as its main repository. The tree shows each worktree as a `⑂ name` group below that repository. output-mesh does not collect the temporary session folder of Claude Code (`/private/tmp/claude-*/`).
 
 ## Using it
 
 **Explorer (left).** Search, a period (all, today, 7, 30, 90 days), collapsible filters, and a tree. Group the tree by repository, agent, app, date, or kind. Every file shows a subtitle: the document's own title, or the task that created it when the title says nothing ("README", "Product").
 
-**Overview (right, nothing selected).** Agent activity per hour, day, or week depending on the period, plus breakdowns by kind, agent, and workspace. Every bar is a filter. Below them, "Just happened" lists each file created, changed, moved, or removed with the agent behind it, and scrolls back through the last 30 days; final files sit beside it.
+If you type a search term, the tree becomes a flat list in relevance order. Each result shows its location and the text that matched. If you open a result, the preview marks each match and scrolls to the first match.
+
+**Overview (right, nothing selected).** "Just happened" comes first. It lists each file that an agent created, changed, moved, or removed, and it scrolls back through the last 30 days. Final files sit beside it. The feed omits a change if the agent made it more than four hours before output-mesh saw it. Below the lists are the charts: agent activity per hour, day, or week, and breakdowns by kind, agent, and workspace. Every bar is a filter.
 
 **Detail (right, file selected).** The preview takes the space. Markdown renders with its front matter shown as a table. The inspector lists every session that touched the file, with tags, notes, and a "final" mark.
 
-**Activity.** A live timeline of agent sessions and the files each one wrote.
+**Activity.** A live timeline of agent sessions and the files each one wrote. If no file is selected, the timeline uses the full width. If you select a file, the timeline moves to the left column and the file opens on the right.
+
+If a collection error occurs, the top bar shows "Collection error" for one hour. Click it to see the recent errors.
 
 Keyboard: `↑` `↓` move and open, `←` `→` collapse and expand, `/` search. Click the title to return to the overview; the browser back button works too.
 
