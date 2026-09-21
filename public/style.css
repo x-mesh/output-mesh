@@ -542,6 +542,19 @@ embed.preview-fill { height: 100%; }
   padding: var(--space-2) var(--space-6); border-bottom: 1px solid var(--line);
 }
 .member-bar .mono { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 줄 번호. 행이 자기 번호를 들고 있어서 본문이 접혀도 어긋나지 않는다. ::before 라 복사되지 않는다. */
+.shj { counter-reset: shj-line; padding-left: 0; }
+.shj-line { counter-increment: shj-line; padding-left: calc(var(--gutter, 4ch) + var(--space-4)); position: relative; }
+.shj-line::before {
+  content: counter(shj-line);
+  position: absolute; left: var(--space-3); width: var(--gutter, 4ch);
+  text-align: right; color: var(--text-dim); opacity: .55;
+  user-select: none; -webkit-user-select: none;
+}
+.shj-line:hover::before { opacity: 1; }
+/* 빈 줄도 한 줄 높이를 가져야 번호가 본문과 맞는다. */
+.shj-line:empty::after { content: '\200b'; }
+
 /* 문법 색칠. 테마를 들여오지 않고 이 화면의 색만 쓴다 — 빌려온 팔레트는 라이트·다크 두 벌을
    따로 관리해야 하고, 여기 본문 글자색과 대비가 맞는지 아무도 보증하지 않는다. */
 .shj .shj-syn-cmnt { color: var(--text-dim); font-style: italic; }
