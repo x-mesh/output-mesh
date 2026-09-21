@@ -175,6 +175,16 @@ describe('V8 — 라이브러리 범위', () => {
     expect(search(store, '', { view: 'library' }).map((r) => r.file_name)).toContain('gen-app');
   });
 
+  test('산출물 표시가 종류를 이긴다 — 에이전트가 내놓은 .json 이 코드로 묻히던 실패', () => {
+    const id = index('fidelity-aggregate.json', '{"score":1}');
+    expect(search(store, '', { view: 'library' }).map((r) => r.file_name)).not.toContain('fidelity-aggregate.json');
+
+    store.recordOrigin(id, { collector: 'aside', sessionRef: 's1', isDeliverable: 1 });
+    expect(search(store, '', { view: 'library' }).map((r) => r.file_name)).toContain('fidelity-aggregate.json');
+    // 표시가 없는 코드까지 딸려 오면 안 된다.
+    expect(search(store, '', { view: 'library' }).map((r) => r.file_name)).not.toContain('App.swift');
+  });
+
   test('다른 필터가 걸려도 그 차원의 패싯은 접히지 않는다', () => {
     const f = facets(store, { view: 'library', ext: 'md' });
     expect(f.exts.map((e) => e.value)).toEqual(expect.arrayContaining(['md', 'png']));
@@ -307,5 +317,40 @@ describe('V11 — 에이전트 메모는 숨기되 버리지 않는다', () => {
     store.close();
     store = new CatalogStore(path);
     expect(store.db.query("SELECT COUNT(*) AS n FROM artifacts WHERE kind = 'memo'").get().n).toBe(1);
+  });
+});
+
+describe('V12 — 발췌는 마크다운 장식을 벗는다', () => {
+  const excerptOf = (body, q) => search(store, q)[0].excerpt;
+
+  test('제목 표시 · 코드 울타리 · 강조를 뗀다', () => {
+    index('plan.md', '앞말이다.\n\n### 1-5. 검증\n\n```bash\ncd server && cargo test\n```\n\n**마이그레이션은 되돌릴 수 없다.**');
+    const got = excerptOf(null, '검증');
+    expect(got).not.toMatch(/###|```|\*\*/);
+    expect(got).toContain('1-5. 검증');
+    // 백틱 안의 명령어는 장식이 아니라 내용이다.
+    expect(got).toContain('cd server && cargo test');
+  });
+
+  test('표 구분선과 가로줄을 뗀다', () => {
+    index('t.md', '| 지적 | 실제 |\n| --- | --- |\n| 느리다 | 측정하니 빨랐다 |\n\n---\n\n끝말이다.');
+    const got = excerptOf(null, '측정하니');
+    expect(got).not.toMatch(/-{3}/);
+    expect(got).toContain('측정하니 빨랐다');
+  });
+
+  test('목록 머리표와 링크 장식을 뗀다', () => {
+    // 발췌 창은 맞은 곳 앞 24자까지다. 링크가 그 밖이면 잘린 채로 남는다 — 픽스처를 창 안에 둔다.
+    index('list.md', '- [검사기](http://x.co) 가 의존성을 분류한다');
+    const got = excerptOf(null, '의존성');
+    expect(got).toContain('검사기 가 의존성을 분류한다');
+    expect(got).not.toMatch(/http|\[|\]/);
+  });
+
+  test('snake_case 이름과 홑별표는 건드리지 않는다 — 식별자를 망가뜨리지 않는다', () => {
+    index('code.md', 'files_changed 열은 json_each 로 편다. 2 * 3 은 6이다.');
+    const got = excerptOf(null, 'json_each');
+    expect(got).toContain('files_changed');
+    expect(got).toContain('2 * 3');
   });
 });
