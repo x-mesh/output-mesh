@@ -217,3 +217,103 @@ describe('워처와 변경 목록', () => {
     expect(events()).toEqual([]);
   });
 });
+
+describe('밀린 변경 — 알아챈 때가 아니라 일어난 때로 본다', () => {
+  const HOUR = 3_600;
+  const now = () => Math.floor(Date.now() / 1000);
+  const at = () => store.db.query('SELECT kind, at FROM artifact_events ORDER BY id').all();
+
+  test('에이전트가 오래전에 쓴 파일은 피드에 남기지 않는다 — 재시작 직후 몇 주 전 파일이 "방금"으로 뜨던 실패', async () => {
+    const path = join(dir, 'old.md');
+    writeFileSync(path, '서버가 꺼져 있던 동안 쓴 문서');
+    await ingestFile(store, path, { ...codex, createdAt: now() - 5 * HOUR });
+
+    expect(events()).toEqual([]);
+    expect(store.byPathKey(nfc(path))).not.toBeNull();
+    expect(store.db.query('SELECT COUNT(*) AS n FROM artifact_origins').get().n).toBe(1);
+  });
+
+  test('기준 안의 변경은 남기고, 시각은 에이전트가 쓴 때다', async () => {
+    const path = join(dir, 'recent.md');
+    const wroteAt = now() - 3 * HOUR;
+    writeFileSync(path, '세 시간 전에 쓴 문서');
+    await ingestFile(store, path, { ...codex, createdAt: wroteAt });
+
+    expect(at()).toEqual([{ kind: 'created', at: wroteAt }]);
+  });
+
+  test('오래된 세션이 고친 것도 남기지 않는다 — 생김만 거르면 바뀜으로 샌다', async () => {
+    const path = join(dir, 'edited.md');
+    writeFileSync(path, '처음');
+    await ingestFile(store, path, codex);
+    writeFileSync(path, '밀린 로그에서 뒤늦게 본 수정');
+    await ingestFile(store, path, { ...codex, sessionRef: 's0', createdAt: now() - 30 * HOUR });
+
+    expect(events().map((e) => e.kind)).toEqual(['created']);
+  });
+
+  test('로그의 시각이 미래여도 지금보다 늦게 적지 않는다', async () => {
+    const path = join(dir, 'skew.md');
+    writeFileSync(path, '시계가 어긋난 로그');
+    const before = now();
+    await ingestFile(store, path, { ...codex, createdAt: now() + HOUR });
+
+    expect(at()[0].at).toBeGreaterThanOrEqual(before);
+    expect(at()[0].at).toBeLessThanOrEqual(now());
+  });
+
+  test('세션이 없는 출처는 시각을 모르므로 지금으로 남긴다', async () => {
+    const path = join(dir, 'README.md');
+    writeFileSync(path, '저장소 문서');
+    const before = now();
+    await ingestFile(store, path, { collector: 'workspace', sessionRef: '', createdAt: now() - 30 * HOUR });
+
+    expect(at()[0].at).toBeGreaterThanOrEqual(before);
+  });
+});
+
+describe('수집 오류 — 다음 수집이 성공해도 가려지지 않는다', () => {
+  const quietWatcher = () => new Watcher(store, [], { useFsWatch: false, withSessionLogs: false });
+
+  test('파일 하나의 실패가 수집 알림에 실려 화면까지 간다', async () => {
+    const watcher = quietWatcher();
+    const seen = [];
+    watcher.onCollect((payload) => seen.push(payload));
+    store.logIngest({ path: '/x/locked.md', level: 'error', code: 'ingest_failed', message: 'EACCES: permission denied' });
+
+    await watcher.collect();
+    await watcher.collect();
+
+    expect(seen.map((p) => p.type)).toEqual(['collected', 'collected']);
+    expect(seen[1].error).toMatchObject({ code: 'ingest_failed', path: '/x/locked.md' });
+    expect(watcher.status().recentError).toMatchObject({ code: 'ingest_failed' });
+  });
+
+  test('경고와 오래된 오류는 싣지 않는다', async () => {
+    const watcher = quietWatcher();
+    const seen = [];
+    watcher.onCollect((payload) => seen.push(payload));
+    store.logIngest({ path: '/x/busy.md', level: 'warn', code: 'hash_unstable', message: '쓰는 중' });
+    store.logIngest({ level: 'error', code: 'sweep_failed', message: '어제 일', at: Math.floor(Date.now() / 1000) - 86_400 });
+
+    await watcher.collect();
+
+    expect(seen[0].error).toBeNull();
+  });
+
+  test('수집이 통째로 실패해도 화면에 알린다 — 실패한 수집은 아무것도 보내지 않아 "방금 수집"이 그대로였다', async () => {
+    const watcher = quietWatcher();
+    const seen = [];
+    watcher.onCollect((payload) => seen.push(payload));
+    const original = store.pruneEvents.bind(store);
+    store.pruneEvents = () => {
+      throw new Error('디스크가 가득 참');
+    };
+
+    await watcher.collect();
+    store.pruneEvents = original;
+
+    expect(seen).toHaveLength(1);
+    expect(seen[0]).toMatchObject({ type: 'failed', error: { code: 'sweep_failed', message: '디스크가 가득 참' } });
+  });
+});

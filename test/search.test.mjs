@@ -179,6 +179,16 @@ describe('V8 — 라이브러리 범위', () => {
     const f = facets(store, { view: 'library', ext: 'md' });
     expect(f.exts.map((e) => e.value)).toEqual(expect.arrayContaining(['md', 'png']));
   });
+
+  test('검색어가 패싯에도 걸린다 — 부분 일치와 전문 검색 두 경로 모두', () => {
+    const like = facets(store, { view: 'library' }, '문서');
+    expect(like.exts).toEqual([{ value: 'md', n: 1 }]);
+    expect(like.states.reduce((sum, row) => sum + row.n, 0)).toBe(searchCount(store, '문서', { view: 'library' }));
+
+    const fts = facets(store, { view: 'library' }, 'struct');
+    expect(fts.states).toEqual([]);
+    expect(fts.kinds).toEqual([{ value: 'code', n: 1 }]);
+  });
 });
 
 describe('V9 — 라이브러리는 모르는 형식을 숨긴다', () => {
@@ -210,7 +220,92 @@ describe('V9 — 라이브러리는 모르는 형식을 숨긴다', () => {
 
   test('사이드바가 숨긴 종류를 서버에서 받는다 — 클라이언트에 복사하면 어긋난다', () => {
     const f = facets(store, { view: 'library' });
-    expect(f.libraryHidden).toEqual(['code', 'other']);
+    expect(f.libraryHidden).toEqual(['code', 'other', 'memo']);
     expect(f.kinds.map((k) => k.value)).toEqual(expect.arrayContaining(['code', 'other', 'office']));
+  });
+});
+
+describe('V10 — 검색 결과는 맞은 이유를 말한다', () => {
+  const filler = '가나다라마바사 '.repeat(20);
+
+  test('전문 검색은 이름에 맞은 파일을 본문에 스친 파일보다 위에 둔다', () => {
+    index('notes.md', `${filler}마이그레이션을 한 번 언급한다`);
+    index('마이그레이션-계획.md', '일정과 담당자');
+    expect(search(store, '마이그레이션').map((r) => r.file_name)).toEqual(['마이그레이션-계획.md', 'notes.md']);
+  });
+
+  test('부분 일치도 같은 순서를 낸다 — bm25 가 없는 경로', () => {
+    index('memo.md', '지난 이력을 정리');
+    index('홍길동_이력서.md', '경력 기술');
+    expect(search(store, '이력').map((r) => r.file_name)).toEqual(['홍길동_이력서.md', 'memo.md']);
+  });
+
+  test('최종본은 검색 중에도 먼저다', () => {
+    const mention = index('notes.md', '마이그레이션을 한 번 언급한다');
+    index('마이그레이션-계획.md', '일정과 담당자');
+    store.setUserState(mention, 'final');
+    expect(search(store, '마이그레이션')[0].file_name).toBe('notes.md');
+  });
+
+  test('발췌는 맞은 곳 주변이고, 잘린 쪽에 말줄임표가 붙는다', () => {
+    index('notes.md', `${filler}여기서 마이그레이션을\n\n   언급한다 ${filler}`);
+    const [{ excerpt }] = search(store, '마이그레이션');
+    expect(excerpt).toContain('여기서 마이그레이션을 언급한다');
+    expect(excerpt.startsWith('…')).toBe(true);
+    expect(excerpt.endsWith('…')).toBe(true);
+  });
+
+  test('발췌는 대소문자를 가리지 않고, 부분 일치 경로에서도 나온다', () => {
+    index('a.md', 'See the README for setup');
+    index('b.md', '지난 이력을 정리');
+    expect(search(store, 'readme')[0].excerpt).toBe('See the README for setup');
+    expect(search(store, '이력')[0].excerpt).toBe('지난 이력을 정리');
+  });
+
+  test('여러 낱말이면 본문에 있는 첫 낱말 주변을 보인다', () => {
+    index('deploy-guide.md', '롤백 절차를 먼저 읽는다');
+    expect(search(store, 'deploy 롤백 절차')[0].excerpt).toBe('롤백 절차를 먼저 읽는다');
+  });
+
+  test('이름에만 맞았거나 검색어가 없으면 발췌가 없다 — 지어내지 않는다', () => {
+    index('마이그레이션-계획.md', '일정과 담당자');
+    expect(search(store, '마이그레이션')[0].excerpt).toBeNull();
+    expect(search(store, '')[0].excerpt).toBeNull();
+  });
+});
+
+describe('V11 — 에이전트 메모는 숨기되 버리지 않는다', () => {
+  function at(absPath, body) {
+    const name = absPath.split('/').pop();
+    const id = store.insertArtifact({ pathKey: absPath, absPath, fileName: name, ext: 'md', sizeBytes: 1, contentHash: absPath, fileId: null, mtime: 1 });
+    store.upsertSearchDoc(id, { name, path: absPath, body, bodyState: 'indexed' });
+    return id;
+  }
+
+  beforeEach(() => {
+    at('/Users/me/.claude/projects/-Users-me-work-aic/memory/aic-local-history.md', '로컬 히스토리가 갈라진 이유');
+    at('/Users/me/.claude/plans/pure-yawning-llama.md', '구현 계획');
+    at('/Users/me/work/aic/docs/memory/design.md', '메모리 설계 문서');
+  });
+
+  test('Claude Code 의 프로젝트 memory 파일만 메모로 분류한다 — 이름이 memory 인 폴더가 전부 걸리지 않는다', () => {
+    const kinds = Object.fromEntries(search(store, '').map((r) => [r.file_name, r.kind]));
+    expect(kinds).toEqual({ 'aic-local-history.md': 'memo', 'pure-yawning-llama.md': 'text', 'design.md': 'text' });
+  });
+
+  test('라이브러리에서는 숨고, 종류로 고르거나 검색 범위를 넓히면 나온다', () => {
+    expect(search(store, '', { view: 'library' }).map((r) => r.file_name)).not.toContain('aic-local-history.md');
+    expect(search(store, '', { view: 'library', kind: 'memo' }).map((r) => r.file_name)).toEqual(['aic-local-history.md']);
+    expect(search(store, '히스토리가').map((r) => r.file_name)).toEqual(['aic-local-history.md']);
+    expect(facets(store, { view: 'library' }).libraryHidden).toContain('memo');
+  });
+
+  test('규칙 버전이 오르면 이미 들어온 행도 다시 분류된다 — 캐시라 키가 바뀌어야 한다', () => {
+    store.db.exec("UPDATE artifacts SET kind = 'text'");
+    store.setState('kind.rules_version', 'older');
+    const path = store.db.filename;
+    store.close();
+    store = new CatalogStore(path);
+    expect(store.db.query("SELECT COUNT(*) AS n FROM artifacts WHERE kind = 'memo'").get().n).toBe(1);
   });
 });

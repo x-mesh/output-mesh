@@ -32,6 +32,7 @@ bun bin/output-mesh.mjs doctor          # 상태 점검
 | `lib/watcher.mjs` | 주기 스윕 + fs.watch 가속, 수집 이벤트 발행 |
 | `lib/coverage.mjs` | 수집 범위 조사. 스윕 경로에서 부르지 않는다 |
 | `lib/workspace-docs.mjs` | 에이전트가 일한 저장소와 그 안의 문서 판정 |
+| `lib/worktrees.mjs` | 작업공간이 어느 저장소의 것인가. `.git` 포인터만 읽는다 |
 | `lib/server.mjs` | HTTP API + 아티팩트 서빙 |
 | `public/` | 바닐라 ESM UI |
 | `public/vendor/` | 핀 고정한 브라우저 라이브러리 (marked.js) |
@@ -40,7 +41,7 @@ bun bin/output-mesh.mjs doctor          # 상태 점검
 
 **파일시스템은 지연 시간, `state.db`는 권위.** 두 신호의 실패 모드가 서로를 상쇄한다. 디스크에는 273개 파일이 있는데 `files_changed`에는 86개 항목뿐이고, 디스크 세션 디렉터리 73개에 대해 DB `sessions`는 71행이다. DB만 보면 놓치고, 파일시스템만 보면 13배 과수집한다.
 
-**수집 범위는 `artifacts/` depth 1.** 한 세션이 `artifacts/` 안에 npm 프로젝트를 통째로 스캐폴딩해서 273개 중 264개를 차지한다. 디렉터리 이름 비교 하나로 syscall 이전에 거부한다. 이 규칙과 Aside 자신의 산출물 플래그(`artifact.sizeBytes`)는 현재 20/20 일치하며, 어긋나면 V3 테스트가 잡는다.
+**수집 범위는 `artifacts/` depth 1.** 한 세션이 `artifacts/` 안에 npm 프로젝트를 통째로 스캐폴딩해서 273개 중 264개를 차지한다. 디렉터리 이름 비교 하나로 syscall 이전에 거부한다. Aside 가 변경으로 기록한 파일에 대해서는 이 규칙과 Aside 자신의 산출물 플래그(`artifact.sizeBytes`)가 같은 집합을 고르고(32개), 어긋나면 V3 테스트가 잡는다. Aside 가 기록하지 않은 파일(이미지 생성 도구나 셸이 `artifacts/` 에 바로 쓴 것, 실측 5개)은 플래그로 판정할 수 없어 비교에서 빼고, 표시 뒤 지워지거나 이름이 바뀐 파일도 뺀다 — 처음에는 20/20 완전 일치였지만 그 둘이 생기면서 완전 일치는 더 이상 계약이 아니다.
 
 **출처는 파일당 여럿이다.** 수집 경로 700개 중 148개(21%)를 세션 2개 이상이, 37개를 공급자 2곳이 건드렸고 한 파일 최대 17세션이다. `artifact_origins` 가 `(artifact_id, collector, session_ref)` 를 키로 이를 담는다. 1:1 이던 `provenance` 는 **읽기 전용 잔재**로 남아 있다 — 마이그레이션 입력이자 롤백 경로이고, 아무도 쓰지 않는다.
 
@@ -59,12 +60,22 @@ bun bin/output-mesh.mjs doctor          # 상태 점검
 
 **Codex·Claude Code 는 산출물이 아니라 출처를 준다.** 둘 다 산출물 레코드가 없지만 세션 로그에 쓴 경로가 남는다 — Codex 는 `apply_patch` 본문의 `*** Add/Update File:` 마커(1,236개 중 321개), Claude Code 는 `tool_use` 블록의 `file_path`. 그 경로의 파일은 이미 저장소 안에 있으므로 옮기지 않고 출처만 붙인다. Aside 가 주지 못하는 `workspace` 가 여기서 채워진다. 자동 발견분은 산출물 플래그가 없으므로 절대 `final` 로 올리지 않는다.
 
+**작업공간은 본 저장소로 접어서 센다.** 출처의 `workspace` 는 세션이 돈 폴더(cwd) 그대로 둔다 — 사실이다. 그런데 작업공간 44곳 중 18곳이 git worktree(`~/.gk/worktree/…`, `<저장소>/.claude/worktrees/…`)라 저장소 하나가 트리와 분포에서 네 군데로 갈라졌다. `workspace_roots(workspace, top, root)` 가 그 대응을 담는다. 재생성 가능한 새 테이블이라 `schema.sql` 에 바로 둔다.
+
+- **`top` 과 `root` 는 다른 질문에 답한다.** 파일이 그 체크아웃 안에 있는가는 `top`(`.git` 이 있는 가장 가까운 상위 폴더)으로, 어느 저장소인가는 `root`(worktree 면 본 저장소)로 본다. worktree 의 파일 경로는 본 저장소 아래에 있지 않아서 `root` 로 포함 판정을 하면 전부 "저장소 밖"이 된다.
+- **비교는 `rootOf(alias)` 하나로.** 패싯 · 필터 · 활동 · 그래프가 같은 식을 쓴다. 아직 찾지 않은 작업공간은 자기 자신이라 조용히 사라지지 않는다.
+- **홈과 그 위의 `.git` 으로는 올라가지 않는다.** 홈에 dotfiles 저장소를 둔 머신에서는 저장소가 아닌 모든 폴더가 홈 하나로 접힌다.
+- **지워진 worktree 의 대응은 덮어쓰지 않는다.** 폴더가 없으면 다시 풀 수 없는데, 자기 자신으로 덮어쓰면 재시작마다 다시 갈라진다.
+- **`describe.mjs` 는 여전히 순수 함수다.** 디스크를 읽는 건 `worktrees.mjs` 이고, describe 는 `{ top, root }` 를 받아 계산만 한다.
+
 **목적이 둘이라 화면도 둘이다.** 큐레이션된 산출물을 찾는 일과 에이전트가 무엇을 했는지 보는 일은 같은 목록으로 섞이지 않는다.
 
 - **라이브러리**(기본) — 문서·이미지·산출물만. 코드를 빼서 100개. `final` 을 먼저 보여준다. 종류를 직접 고르면 그 선택이 이긴다.
 - **활동** — 전부를 세션 타임라인으로. 단위가 파일이 아니라 작업이라 `(collector, session_ref)` 로 묶고 최신순으로 세운다. 감시용이라 검색을 쓰지 않는다.
 
 **코드 판정은 확장자만으로 부족하다.** `.tape`·`.pbxproj` 같은 스크립트와 `Makefile`·`.zshrc` 처럼 확장자가 없는 설정이 문서로 새면 산출물이 묻힌다. `kindOf(ext, fileName)` 이 파일명까지 본다 — 점으로 시작하면 설정, 확장자가 없으면 문서가 아니다.
+
+**에이전트 메모는 숨기되 버리지 않는다.** Claude Code 의 프로젝트 memory(`~/.claude/projects/*/memory/`)는 에이전트가 자기용으로 적는 메모다. 실측 18개가 라이브러리와 "방금 일어난 일" 맨 위에 섞여 산출물을 가렸다. 수집에서 빼면 나중에 찾을 수 없으므로 종류 `memo` 로 분류해 코드처럼 라이브러리에서만 숨긴다. 이 종류는 `listKindOf(ext, fileName, absPath)` 만 낸다 — `kindOf` 는 추출과 미리보기를 구동하고 메모도 문서로 읽혀야 하므로 경로를 보지 않는다. 폴더 이름 `memory` 만으로 가르지 않는다: 저장소의 `docs/memory/` 는 진짜 문서다. 반대로 Claude Code 의 세션 임시 폴더(`/private/tmp/claude-*/`)는 세션이 끝나면 버려지는 자리라 세션 로그 수집에서 뺀다(`isIndexablePath`). 임시 폴더 전체를 거르지는 않는다.
 
 **분류는 쓸 때 굳는다.** `artifacts.kind` 가 그 결과를 담는다. 읽을 때 분류하면 호출부마다 인자를 빠뜨릴 수 있고(실제로 `server.mjs` 세 곳이 갈라져 있었다) `missing_at` 으로 좁힌 id 목록에 이음매가 생긴다. 컬럼이면 `a.kind` 하나라 갈라질 수가 없다. 대신 캐시이므로 **무효화 키가 필요하다** — `kindOf` 를 고치면 그 바로 위의 `KIND_RULES_VERSION` 을 올린다. 안 올리면 분류 수정이 기존 행에 아무 효과도 내지 않는다.
 
@@ -84,7 +95,7 @@ bun bin/output-mesh.mjs doctor          # 상태 점검
 
 `KIND.CODE` 는 추출·미리보기에서 `KIND.TEXT` 와 동일하게 처리된다 — 갈라 보는 건 목록에서뿐이다.
 
-**세션 제목은 첫 사람 발화다.** 로그의 첫 user 메시지는 대개 지침 덤프(AGENTS.md, system-reminder, teammate-message)라 건너뛴다. 이게 틀리면 활동 보기가 읽히지 않는다.
+**세션 제목은 첫 사람 발화다.** 로그의 첫 user 메시지는 대개 지침 덤프(AGENTS.md, system-reminder, teammate-message, Codex 의 `<environment_context>`, 스킬 호출 문구)라 건너뛴다. 이게 틀리면 활동 보기가 읽히지 않는다. 제목은 첫 줄이 아니라 쓸 만한 첫 줄이고(`titleFromPrompt`), 붙여넣은 경로로 시작하면 파일 이름만 남긴다. 출처는 새 제목이 없을 때 옛 제목을 지키므로(`COALESCE`) 이미 저장된 잡음은 활동 보기가 읽을 때 가린다(`sessionTitleOf`).
 
 **산출물 폴더 아래 디렉터리는 한 줄로 접는다.** 에이전트가 프로젝트를 통째로 만들면 수백 개 파일이 아니라 번들 한 행이 된다. 정체성은 내용물 목록의 해시이고(파일을 읽지 않는다), 내용물 경로는 검색 본문으로 남아서 번들 **안의** 파일명으로도 찾을 수 있다. `.git`·`node_modules` 는 목록에서 뺀다.
 

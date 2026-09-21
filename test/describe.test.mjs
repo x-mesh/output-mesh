@@ -8,7 +8,7 @@ import { indexPending } from '../lib/collector.mjs';
 import { Watcher } from '../lib/watcher.mjs';
 import { search } from '../lib/search.mjs';
 import { EXTRACT_RULES_VERSION, docTitleFrom, extractBody } from '../lib/extract.mjs';
-import { describe, isInformativeTask, isInformativeTitle, locationOf } from '../lib/describe.mjs';
+import { describe, isInformativeTask, isInformativeTitle, locationOf, sessionTitleOf, titleFromPrompt } from '../lib/describe.mjs';
 import { TITLE_MAX_CHARS } from '../lib/paths.mjs';
 
 let dir;
@@ -91,6 +91,62 @@ group('부제 — 문서 제목, 없으면 만든 작업', () => {
   test('쓸 만한 작업이 없으면 부제를 비운다 — 잡음을 보여주지 않는다', () => {
     expect(describe({ title: null, fileName: 'card', tasks: ['계속', '❯ /x'] }).subtitle).toBeNull();
   });
+
+  test('스킬 호출 문구와 훅이 주입한 지시는 사람이 시킨 일이 아니다', () => {
+    for (const noise of [
+      'Invoke the `handon` skill to handle this request. Follow the instructions in `skills/handon`',
+      'Invoke the handon skill to handle this request.',
+      '[REQUIRED FINAL STEP — you MUST run this shell command before stopping] ``` tm-agent done',
+    ]) {
+      expect([noise, isInformativeTask(noise)]).toEqual([noise, false]);
+    }
+  });
+
+  test('붙인 그림 표시는 벗기고 그 뒤의 말을 쓴다', () => {
+    const row = describe({ title: null, fileName: 'fix.md', tasks: ['[Image #1] [Image #2] keychain 접근이 안되는데?'] });
+    expect([row.subtitle, row.subtitle_source]).toEqual(['keychain 접근이 안되는데?', 'task']);
+    expect(describe({ title: null, fileName: 'fix.md', tasks: ['[Image #1]'] }).subtitle).toBeNull();
+  });
+
+  test('저장소 이름만 되풀이하는 제목은 부제가 아니다 — 위치가 이미 같은 말을 한다', () => {
+    const readme = { title: 'aic', fileName: 'README.md', absPath: '/w/aic/README.md', workspaces: ['/w/aic'], home: '/w' };
+    expect(describe({ ...readme, tasks: [] }).subtitle).toBeNull();
+    expect(describe({ ...readme, tasks: ['에이전트 등록 설정을 추가해줘'] })).toMatchObject({ subtitle: '에이전트 등록 설정을 추가해줘', subtitle_source: 'task' });
+    // 띄어쓰기와 대소문자만 다른 것도 같은 말이다.
+    expect(describe({ title: 'Output Mesh', fileName: 'index.html', absPath: '/w/output-mesh/public/index.html', workspaces: ['/w/output-mesh'], home: '/w' }).subtitle).toBeNull();
+    // 저장소 밖 파일의 제목은 그대로 둔다.
+    expect(describe({ title: 'aic', fileName: 'README.md', absPath: '/elsewhere/README.md', workspaces: ['/w/aic'], home: '/w' }).subtitle).toBe('aic');
+  });
+});
+
+group('작업 제목 — 첫 발화에서 고른다', () => {
+  test('붙여넣은 경로로 시작하면 파일 이름만 남기고 뒤의 말을 쓴다 — 28행의 제목이 잘린 경로였다', () => {
+    const prompt = '/Users/me/.aside/u/0/sessions/2026-09-16_x/artifacts/rca-ux-patches.md 확인하고, 개선해야할지 확인해봐';
+    expect(titleFromPrompt(prompt, 80)).toBe('rca-ux-patches.md 확인하고, 개선해야할지 확인해봐');
+    expect(isInformativeTask(prompt)).toBe(true);
+  });
+
+  test('슬래시 커맨드와 경로뿐인 줄은 그대로 잡음이다', () => {
+    expect(isInformativeTask('/clear')).toBe(false);
+    expect(isInformativeTask('/xm:mutate lib/search.mjs')).toBe(false);
+    expect(isInformativeTask('/Users/me/work/repo/README.md')).toBe(false);
+  });
+
+  test('첫 줄이 잡음이면 쓸 만한 첫 줄을 고르고, 없으면 첫 줄이라도 쓴다', () => {
+    expect(titleFromPrompt('https://example.com/issue/12\n이 이슈를 재현해서 고쳐줘', 80)).toBe('이 이슈를 재현해서 고쳐줘');
+    expect(titleFromPrompt('계속', 80)).toBe('계속');
+    expect(titleFromPrompt('가'.repeat(200), 80)).toHaveLength(80);
+    expect(titleFromPrompt('', 80)).toBeNull();
+  });
+
+  test('활동 보기는 주입된 문구만 가린다 — 짧아도 사람이 친 말은 남긴다', () => {
+    expect(sessionTitleOf('<environment_context>')).toBeNull();
+    expect(sessionTitleOf('Invoke the `handon` skill to handle this request.')).toBeNull();
+    expect(sessionTitleOf('[REQUIRED FINAL STEP — you MUST run this shell command before stopping]')).toBeNull();
+    expect(sessionTitleOf('[Image #1] 왜 연결이 안 되나?')).toBe('왜 연결이 안 되나?');
+    expect(sessionTitleOf('계속')).toBe('계속');
+    expect(sessionTitleOf(null)).toBeNull();
+  });
 });
 
 group('위치 — 어디서', () => {
@@ -108,6 +164,21 @@ group('위치 — 어디서', () => {
     expect(locationOf('/Users/me/.codex/skills/r/SKILL.md', ['/Users/me/x-kit'], home)).toEqual({ repo: null, dir: '~/.codex/skills/r/' });
     // 이름이 겹치는 형제 디렉터리는 안이 아니다.
     expect(locationOf('/Users/me/x-kit-old/a.md', ['/Users/me/x-kit'], home).repo).toBeNull();
+  });
+
+  test('worktree 의 파일은 본 저장소 이름 아래에 worktree 이름과 함께 선다', () => {
+    const main = { top: '/Users/me/term-mesh', root: '/Users/me/term-mesh' };
+    const nested = { top: '/Users/me/term-mesh/.claude/worktrees/latency', root: '/Users/me/term-mesh' };
+    const outside = { top: '/Users/me/.gk/worktree/term-mesh/feat/sync', root: '/Users/me/term-mesh' };
+    expect(locationOf('/Users/me/.gk/worktree/term-mesh/feat/sync/docs/a.md', [main, outside], home)).toEqual({ repo: 'term-mesh', dir: 'docs/', worktree: 'sync' });
+    // 본 저장소 안에 든 worktree 는 가장 안쪽 꼭대기가 이긴다 — 본 저장소의 .claude/ 폴더로 보이지 않는다.
+    expect(locationOf('/Users/me/term-mesh/.claude/worktrees/latency/README.md', [main, nested], home)).toEqual({ repo: 'term-mesh', dir: '/', worktree: 'latency' });
+    expect(locationOf('/Users/me/term-mesh/README.md', [main, nested], home)).toEqual({ repo: 'term-mesh', dir: '/' });
+  });
+
+  test('저장소 하위 폴더에서 돈 세션의 파일은 저장소 기준 경로를 갖는다', () => {
+    const sub = { top: '/Users/me/term-mesh', root: '/Users/me/term-mesh' };
+    expect(locationOf('/Users/me/term-mesh/daemon/src/main.rs', [sub], home)).toEqual({ repo: 'term-mesh', dir: 'daemon/src/' });
   });
 
   test('작업공간이 없으면 null — 화면이 수집기 이름을 쓴다', () => {

@@ -38,6 +38,7 @@
       'groupBy.aria': '트리 묶기 기준',
       'tree.collapseAll': '모두 접기',
       'aria.tree': '산출물',
+      'aria.results': '검색 결과 · 관련도순',
       'coverage.link': '수집 범위',
       'aria.resizer': '탐색기 폭',
       'aria.content': '내용',
@@ -66,6 +67,7 @@
       'bodyState.failed': '본문 추출 실패', 'bodyState.pending': '색인 대기', 'bodyState.none': '색인 없음',
       'kind.text': '문서', 'kind.code': '코드', 'kind.bundle': '폴더', 'kind.markup': '웹 페이지', 'kind.pdf': 'PDF',
       'kind.sheet': '스프레드시트', 'kind.office': '오피스 문서', 'kind.image': '이미지', 'kind.other': '기타',
+      'kind.memo': '에이전트 메모',
       'kind.unclassified': '미분류',
 
       'chip.only': ({ name }) => `${name} 만 보기`,
@@ -78,7 +80,7 @@
       'facet.favoritesOnly': '★ 즐겨찾기만',
       'facet.outOfScopeTitle': '라이브러리 밖입니다. 누르면 이 종류만 봅니다',
       'facet.outOfScope': '라이브러리 밖',
-      'facet.outsideTitle': '코드와 모르는 형식은 라이브러리에서 숨깁니다. 종류 필터로 꺼내 볼 수 있습니다',
+      'facet.outsideTitle': '코드, 에이전트 메모, 모르는 형식은 라이브러리에서 숨깁니다. 종류 필터로 꺼내 볼 수 있습니다',
       'facet.outsideCount': ({ n }) => `라이브러리 밖 ${num(n)}개`,
 
       'stat.library': '라이브러리', 'stat.libraryTitle': '검색어와 필터를 지우고 라이브러리 전체 보기',
@@ -88,6 +90,7 @@
       'stat.active': ({ n }) => `${n}시간 내 작업`,
       'stat.activeTitle': ({ n }) => `최근 ${n}시간 동안 파일을 쓴 대화. 누르면 활동 보기`,
 
+      'where.worktree': ({ name }) => `git worktree: ${name}`,
       'tree.elsewhere': '저장소 밖', 'tree.untitledTask': '제목 없는 작업', 'agent.unknown': '에이전트 모름',
       'date.today': '오늘', 'date.yesterday': '어제', 'date.week': '지난 7일', 'date.month': '지난 30일',
       'tree.noMatch': '맞는 산출물이 없습니다.', 'tree.empty': '아직 수집된 산출물이 없습니다.',
@@ -95,6 +98,7 @@
       'tree.touchedAt': ({ date }) => `에이전트가 손댄 때 ${date}`,
       'summary.count': ({ n }) => `${num(n)}개`,
       'summary.partial': ({ n, total }) => `${num(total)}개 중 ${num(n)}개`,
+      'summary.ranked': '관련도순',
       'hint.like': '부분 일치', 'hint.fts': '전문 검색',
 
       'preview.missing': '원본 파일이 사라졌습니다.', 'preview.missingNote': '기록, 태그, 메모는 그대로 남아 있습니다.',
@@ -172,6 +176,8 @@
       'session.final': ({ n }) => `최종본 ${num(n)}`, 'session.subagents': ({ n }) => `서브에이전트 ${num(n)}`,
       'session.more': ({ n }) => `외 ${num(n)}개`,
       'activity.empty': '최근 활동이 없습니다.', 'activity.summary': ({ n }) => `최근 작업 ${num(n)}건`,
+      'live.error': ({ when }) => `수집 오류 · ${when}`,
+      'coverage.errors': '최근 수집 오류',
       'live.down': '연결 끊김', 'live.up': '실시간', 'live.collected': ({ when }) => `실시간 · ${when} 수집`,
       'theme.system': '시스템 설정', 'theme.light': '라이트', 'theme.dark': '다크',
       'theme.label': ({ current, next }) => `테마: ${current}. 누르면 ${next}`,
@@ -194,6 +200,7 @@
       'groupBy.aria': 'Group the tree by',
       'tree.collapseAll': 'Collapse all',
       'aria.tree': 'Artifacts',
+      'aria.results': 'Search results, most relevant first',
       'coverage.link': 'Coverage',
       'aria.resizer': 'Explorer width',
       'aria.content': 'Content',
@@ -222,6 +229,7 @@
       'bodyState.failed': 'Text extraction failed', 'bodyState.pending': 'Waiting to index', 'bodyState.none': 'Not indexed',
       'kind.text': 'Document', 'kind.code': 'Code', 'kind.bundle': 'Folder', 'kind.markup': 'Web page', 'kind.pdf': 'PDF',
       'kind.sheet': 'Spreadsheet', 'kind.office': 'Office document', 'kind.image': 'Image', 'kind.other': 'Other',
+      'kind.memo': 'Agent notes',
       'kind.unclassified': 'Unclassified',
 
       'chip.only': ({ name }) => `Show only ${name}`,
@@ -234,7 +242,7 @@
       'facet.favoritesOnly': '★ Favorites only',
       'facet.outOfScopeTitle': 'Not in the library. Click to show only this kind',
       'facet.outOfScope': 'not in library',
-      'facet.outsideTitle': 'Code and unknown formats are hidden from the library. Use the Kind filter to show them',
+      'facet.outsideTitle': 'Code, agent notes, and unknown formats are hidden from the library. Use the Kind filter to show them',
       'facet.outsideCount': ({ n }) => `${num(n)} not in library`,
 
       'stat.library': 'Library', 'stat.libraryTitle': 'Clear search and filters and show the whole library',
@@ -244,6 +252,7 @@
       'stat.active': ({ n }) => `Tasks in ${n}h`,
       'stat.activeTitle': ({ n }) => `Conversations that wrote files in the last ${n} hours. Click for Activity`,
 
+      'where.worktree': ({ name }) => `git worktree: ${name}`,
       'tree.elsewhere': 'Outside repositories', 'tree.untitledTask': 'Untitled task', 'agent.unknown': 'Unknown agent',
       'date.today': 'Today', 'date.yesterday': 'Yesterday', 'date.week': 'Last 7 days', 'date.month': 'Last 30 days',
       'tree.noMatch': 'Nothing matches.', 'tree.empty': 'Nothing collected yet.',
@@ -251,6 +260,7 @@
       'tree.touchedAt': ({ date }) => `Last touched by an agent ${date}`,
       'summary.count': ({ n }) => count(n, 'item', 'items'),
       'summary.partial': ({ n, total }) => `${num(n)} of ${num(total)}`,
+      'summary.ranked': 'by relevance',
       'hint.like': 'Partial match', 'hint.fts': 'Full-text',
 
       'preview.missing': 'The original file is gone.', 'preview.missingNote': 'Its record, tags, and notes are kept.',
@@ -328,6 +338,8 @@
       'session.final': ({ n }) => `${num(n)} final`, 'session.subagents': ({ n }) => count(n, 'subagent', 'subagents'),
       'session.more': ({ n }) => `+${num(n)} more`,
       'activity.empty': 'No recent activity.', 'activity.summary': ({ n }) => count(n, 'recent task', 'recent tasks'),
+      'live.error': ({ when }) => `Collection error · ${when}`,
+      'coverage.errors': 'Recent collection errors',
       'live.down': 'Disconnected', 'live.up': 'Live', 'live.collected': ({ when }) => `Live · collected ${when}`,
       'theme.system': 'System', 'theme.light': 'Light', 'theme.dark': 'Dark',
       'theme.label': ({ current, next }) => `Theme: ${current}. Click for ${next}`,

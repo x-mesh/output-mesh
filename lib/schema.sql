@@ -73,6 +73,17 @@ CREATE INDEX IF NOT EXISTS idx_origins_provider  ON artifact_origins(provider, a
 CREATE INDEX IF NOT EXISTS idx_origins_workspace ON artifact_origins(workspace, artifact_id);
 CREATE INDEX IF NOT EXISTS idx_origins_session   ON artifact_origins(collector, session_ref);
 
+-- 세션이 돈 폴더(workspace)가 어느 저장소의 것인가. git worktree 와 저장소 하위 폴더에서 돈 세션을
+-- 본 저장소로 접는다. 디스크에서 다시 만들 수 있고, 출처의 workspace 는 사실 그대로 둔다.
+--   top   .git 이 있는 가장 가까운 상위 폴더. 파일이 이 체크아웃 안에 있는지는 top 으로 본다
+--   root  worktree 면 본 저장소, 아니면 top. 패싯·필터·트리의 저장소는 root 다
+CREATE TABLE IF NOT EXISTS workspace_roots (
+  workspace  TEXT PRIMARY KEY,
+  top        TEXT NOT NULL,
+  root       TEXT NOT NULL,
+  checked_at INTEGER NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS tags (
   id       INTEGER PRIMARY KEY,
   name     TEXT NOT NULL,

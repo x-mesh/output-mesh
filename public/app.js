@@ -17,6 +17,10 @@ const HOME_LIST_COUNT = 6;
 const CHANGE_PAGE_SIZE = 30;
 // 이 시간 안에 생기거나 바뀐 파일에는 트리에서 표시를 단다. 그 뒤로는 평범한 줄로 돌아간다.
 const FRESH_WINDOW_S = 10 * 60;
+// 미리보기에서 칠하는 일치의 상한. 2MB 로그에서 흔한 낱말을 찾으면 수만 곳이 맞아 화면이 멈춘다.
+const MAX_PREVIEW_MARKS = 500;
+// 격리된 문서 안에서 첫 일치가 받는 id. 부모는 이 이름으로만 그 자리를 가리킬 수 있다.
+const PREVIEW_HIT_ID = 'aoc-search-hit';
 const EXPLORER_WIDTH = { min: 240, max: 560, step: 16, initial: 340 };
 const LIVE_COALESCE_MS = 400;
 const SEARCH_DEBOUNCE_MS = 120;
@@ -156,7 +160,7 @@ const ICONS = {
   moon: 'M13.25 9.6A5.5 5.5 0 0 1 6.4 2.75a5.5 5.5 0 1 0 6.85 6.85z',
   auto: 'M8 2.5a5.5 5.5 0 1 0 0 11a5.5 5.5 0 1 0 0-11zM8 2.5v11M8 5l3.2-1.6M8 8h5.4M8 11l3.2 1.6',
 };
-const KIND_ICON = { text: 'doc', code: 'doc', office: 'doc', other: 'doc', markup: 'web', image: 'image', sheet: 'sheet', pdf: 'pdf', bundle: 'bundle' };
+const KIND_ICON = { text: 'doc', code: 'doc', memo: 'doc', office: 'doc', other: 'doc', markup: 'web', image: 'image', sheet: 'sheet', pdf: 'pdf', bundle: 'bundle' };
 
 function icon(name, className = '') {
   const svg = document.createElementNS(SVG_NS, 'svg');
@@ -215,11 +219,15 @@ function badges(row, { compact = false } = {}) {
 }
 
 /** 저장소 안이면 저장소 이름 + 저장소 안 경로, 밖이면 실제 경로, 작업공간이 없으면 수집기. */
+// git worktree 의 파일은 본 저장소 아래에 선다. 어느 체크아웃의 것인지는 이 이름표가 말한다.
+const worktreeLabel = (name) => `⑂ ${name}`;
+
 function locationNodes(row) {
   const where = row.location;
   if (!where) return [el('span', {}, collectorLabel(row.collector))];
   return keep([
     where.repo && el('span', { className: 'where-repo' }, where.repo),
+    where.worktree && el('span', { className: 'where-worktree', title: t('where.worktree', { name: where.worktree }) }, worktreeLabel(where.worktree)),
     el('span', { className: 'where-dir', title: row.abs_path }, where.dir),
   ]);
 }
@@ -243,6 +251,39 @@ function activityParams() {
 }
 
 const isSearching = () => state.q.trim() !== '' || Object.keys(state.filters).length > 0 || state.period !== 'all';
+// 관련도는 검색어가 있을 때만 있다. 필터와 기간은 집합을 좁힐 뿐이라 트리를 그대로 둔다.
+const hasQuery = () => state.q.trim() !== '';
+
+const escapeRegExp = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/** 검색어를 찾는 정규식. 긴 낱말을 앞에 둔다 — 짧은 낱말이 긴 낱말의 앞부분을 먼저 가져가지 않게. */
+function queryPattern() {
+  const tokens = state.q.normalize('NFC').split(/\s+/).filter(Boolean).sort((a, b) => b.length - a.length);
+  return tokens.length ? new RegExp(`(${tokens.map(escapeRegExp).join('|')})`, 'giu') : null;
+}
+
+/**
+ * 검색어가 맞은 곳을 <mark> 로 감싼 노드들. 글자는 텍스트 노드로만 넣는다 — 파일명과 발췌는
+ * 에이전트가 쓴 내용이다. 파일명은 NFD 일 수 있어서 검색어와 같은 NFC 로 맞춘 뒤 찾는다.
+ * limit 을 넘긴 뒤의 글자는 한 덩어리로 둔다.
+ */
+function highlighted(text, limit = Infinity) {
+  const pattern = queryPattern();
+  if (!pattern || limit <= 0) return [text];
+  const parts = text.normalize('NFC').split(pattern);
+  const nodes = [];
+  let marks = 0;
+  for (let i = 0; i < parts.length; i += 1) {
+    if (marks >= limit) {
+      nodes.push(parts.slice(i).join(''));
+      break;
+    }
+    if (parts[i] === '') continue;
+    if (i % 2 === 1) marks += 1;
+    nodes.push(i % 2 === 1 ? el('mark', {}, parts[i]) : parts[i]);
+  }
+  return nodes;
+}
 
 function renderPeriod() {
   $('period').replaceChildren(...PERIODS.map((value) =>
@@ -260,16 +301,28 @@ function setPeriod(period) {
   void refresh();
 }
 
+/**
+ * 활동 보기는 고른 파일이 없으면 화면 전체를 쓴다. 340px 칸에서는 세션마다 파일 칩 열댓 개가 여러 줄로
+ * 접혔고, 오른쪽에는 활동과 무관한 직전 문서가 남아 있었다. 같은 목록이 폭만 달라진다 — 파일을 고르면
+ * 타임라인은 왼쪽 칸으로 물러나고 오른쪽에 내용이 선다.
+ */
+function updateWide() {
+  $('layout').toggleAttribute('data-wide', state.mode === 'activity' && state.view === 'home');
+}
+
 function setModeState(mode) {
   state.mode = mode;
   $('mode-library').setAttribute('aria-selected', String(mode === 'library'));
   $('mode-activity').setAttribute('aria-selected', String(mode === 'activity'));
   $('q').disabled = mode === 'activity';
   $('q').placeholder = t(mode === 'activity' ? 'search.disabled' : 'search.placeholder');
+  updateWide();
 }
 
 function setMode(mode) {
   setModeState(mode);
+  // 활동으로 들어갈 때는 보던 문서를 내려놓는다. 남겨 두면 타임라인 옆에 상관없는 문서가 서 있다.
+  if (mode === 'activity') goHome();
   void refresh();
 }
 
@@ -294,6 +347,13 @@ function resetLibrary() {
   void refresh();
 }
 
+/** 작업공간 이름표. 같은 저장소를 두 군데에 받아 둔 경우처럼 이름이 겹치면 부모 폴더까지 보인다. */
+function workspaceLabel(path) {
+  const name = path.split('/').pop();
+  const clash = (state.facets?.workspaces ?? []).some((w) => w.value !== path && w.value.split('/').pop() === name);
+  return clash ? path.split('/').slice(-2).join('/') : name;
+}
+
 function filterDisplay(key, value) {
   switch (key) {
     case 'favorite': return t('filter.favorite');
@@ -301,7 +361,7 @@ function filterDisplay(key, value) {
     case 'provider': return `${t('filter.provider')}: ${PROVIDER_LABEL[value] ?? value}`;
     case 'collector': return `${t('filter.collector')}: ${collectorLabel(value)}`;
     case 'state': return stateLabel(value);
-    case 'workspace': return `${t('filter.workspace')}: ${String(value).split('/').pop()}`;
+    case 'workspace': return `${t('filter.workspace')}: ${workspaceLabel(String(value))}`;
     default: return `${tOr(`filter.${key}`, key)}: ${value}`;
   }
 }
@@ -500,9 +560,11 @@ function renderStats() {
 function treePlacement(row) {
   const where = row.location;
   if (where?.repo) {
+    const folders = where.dir === '/' ? [] : where.dir.replace(/\/$/, '').split('/');
     return {
       group: { key: `repo:${where.repo}`, label: where.repo, icon: 'repo' },
-      folders: where.dir === '/' ? [] : where.dir.replace(/\/$/, '').split('/'),
+      // worktree 는 저장소 아래 한 단으로 둔다. 본 저장소와 worktree 에 같은 README 가 있어도 구분된다.
+      folders: where.worktree ? [worktreeLabel(where.worktree), ...folders] : folders,
       folderIcon: 'folder',
       flatten: true,
     };
@@ -675,7 +737,8 @@ function renderTree({ keepScroll = false } = {}) {
   const scroll = list.scrollTop;
   const focused = state.visible.find((entry) => entry.item === document.activeElement)?.id;
 
-  list.setAttribute('role', 'tree');
+  list.setAttribute('role', listRole());
+  list.setAttribute('aria-label', t(hasQuery() ? 'aria.results' : 'aria.tree'));
   list.replaceChildren();
   rowNodes.clear();
   state.visible = [];
@@ -686,7 +749,10 @@ function renderTree({ keepScroll = false } = {}) {
       isSearching() && el('button', { type: 'button', onclick: resetLibrary }, t('tree.clear'))));
     return;
   }
-  for (const root of state.tree) appendFolder(list, root, 0);
+  // 검색 결과는 서버가 준 관련도순 그대로 한 줄로 세운다. 저장소별로 묶으면 가장 잘 맞은 파일이
+  // 최근에 손댄 저장소 아래로 흩어진다.
+  if (hasQuery()) for (const row of state.rows) appendFile(list, row, 0);
+  else for (const root of state.tree) appendFolder(list, root, 0);
 
   const active = state.visible.find((entry) => entry.id === (focused ?? state.selected)) ?? state.visible[0];
   if (active) active.item.tabIndex = 0;
@@ -720,12 +786,21 @@ function appendFolder(list, node, level) {
   for (const row of node.files) appendFile(list, row, level + 1, node.showDir ? dirLeaf(row) : null);
 }
 
+const listRole = () => (hasQuery() ? 'listbox' : 'tree');
+
 function appendFile(list, row, level, leaf = null) {
+  // 검색 결과 줄은 트리가 말해 주던 위치를 스스로 말해야 하고, 왜 맞았는지를 덧붙인다.
+  const result = hasQuery();
+  const text = result ? highlighted : (value) => [value];
   const entry = { id: row.id, type: 'file', row, level };
   entry.item = el('li', {
     className: 'tree-item file',
     tabIndex: -1,
-    attrs: { role: 'treeitem', 'aria-level': level + 1, 'aria-selected': String(state.selected === row.id) },
+    attrs: {
+      role: result ? 'option' : 'treeitem',
+      'aria-level': result ? null : level + 1,
+      'aria-selected': String(state.selected === row.id),
+    },
     onclick: () => {
       focusEntry(entry);
       void select(row.id);
@@ -735,12 +810,14 @@ function appendFile(list, row, level, leaf = null) {
     el('div', { className: 'file-text' },
       el('div', { className: 'file-line' },
         leaf && el('span', { className: 'file-prefix', title: leaf.path }, leaf.prefix),
-        el('span', { className: 'file-name' }, row.file_name),
+        el('span', { className: 'file-name' }, ...text(row.file_name)),
         ...badges(row, { compact: true })),
       row.subtitle && el('div', {
         className: 'file-what',
         title: `${subtitleSource(row.subtitle_source)}: ${row.subtitle}`,
-      }, row.subtitle)),
+      }, ...text(row.subtitle)),
+      result && el('div', { className: 'file-where' }, ...locationNodes(row)),
+      result && row.excerpt && el('div', { className: 'file-excerpt' }, ...text(row.excerpt))),
     el('span', { className: 'file-when', title: t('tree.touchedAt', { date: fmtDate(touchedAt(row)) }) }, shortWhen(touchedAt(row))));
   entry.item.style.setProperty('--level', level);
   addRowNode(row.id, entry.item);
@@ -773,6 +850,7 @@ function collapseAll() {
 
 /** 트리 밖에서 고른 파일(홈, 활동, 같은 내용)을 트리에서도 보이게 조상을 연다. */
 function revealInTree(id) {
+  if (hasQuery()) return scrollToRow(id);
   const chain = state.parents.get(id);
   if (!chain) return;
   for (const key of chain) setOpen(key, true);
@@ -830,9 +908,11 @@ $('rows').addEventListener('keydown', (event) => {
 // ── 목록 갱신 ───────────────────────────────────────────────────────────
 
 function updateSummary() {
-  $('summary').textContent = state.rows.length < state.total
+  const count = state.rows.length < state.total
     ? t('summary.partial', { n: state.rows.length, total: state.total })
     : t('summary.count', { n: state.total });
+  // 묶기 선택이 사라진 자리에서 지금 순서가 무엇인지 말한다.
+  $('summary').textContent = hasQuery() ? `${count} · ${t('summary.ranked')}` : count;
   const trimmed = state.q.trim();
   const shortToken = trimmed.split(/\s+/).some((t) => t && t.length < 3);
   $('hint').textContent = trimmed === '' ? '' : t(shortToken ? 'hint.like' : 'hint.fts');
@@ -846,8 +926,9 @@ async function refresh({ live = false } = {}) {
   renderStats();
   if (state.mode === 'activity') return refreshActivity();
 
-  $('collapse-all').hidden = false;
-  $('group-by').parentElement.hidden = false;
+  // 검색 결과는 묶지 않으므로 묶기와 접기가 할 일이 없다.
+  $('collapse-all').hidden = hasQuery();
+  $('group-by').parentElement.hidden = hasQuery();
   // 종류로 묶을 때 트리가 패싯의 이름표를 쓴다. 트리보다 먼저 받아 둔다.
   const [{ rows, total }] = await Promise.all([
     api(`/api/search?${searchParams({ limit: TREE_LIMIT })}`),
@@ -856,7 +937,7 @@ async function refresh({ live = false } = {}) {
   ]);
   // 새 변경이 오면 파일 줄은 그대로여도 표시("새로")와 개요 목록이 바뀐다.
   const signature = `${state.changes[0]?.id ?? 0}|${rows.map((r) => `${r.id}:${r.mtime}:${r.state}:${r.favorite}`).join(',')}`;
-  const changed = !live || signature !== state.signature || $('rows').getAttribute('role') !== 'tree';
+  const changed = !live || signature !== state.signature || $('rows').getAttribute('role') !== listRole();
   state.rows = rows;
   state.total = total ?? rows.length;
   state.signature = signature;
@@ -879,11 +960,15 @@ function markSelected(id) {
 async function select(id, { reveal = false, fromRoute = false } = {}) {
   // 개요에서 파일로 가는 건 기록을 쌓고, 파일에서 파일로는 바꿔 쓴다.
   if (!fromRoute) setRoute(`#/a/${id}`, { replace: state.view === 'detail' });
+  const wasWide = $('layout').hasAttribute('data-wide');
   state.view = 'detail';
+  updateWide();
   state.selected = id;
   state.rawMode = false;
   state.showAllOrigins = false;
   markSelected(id);
+  // 넓은 타임라인이 왼쪽 칸으로 접히면 카드 높이가 달라져 고른 파일이 화면 밖으로 밀린다.
+  if (wasWide) scrollToRow(id);
   if (reveal && state.mode === 'library') revealInTree(id);
   else if (reveal) scrollToRow(id);
   const detail = await api(`/api/artifact/${id}`);
@@ -907,7 +992,9 @@ function move(step) {
 }
 
 const MARKDOWN_EXT = new Set(['md', 'markdown']);
-const TEXT_KINDS = new Set(['text', 'code']);
+// 에이전트 메모(memo)는 목록에서만 갈라 보는 문서다. 미리보기는 문서와 같다.
+const TEXT_KINDS = new Set(['text', 'code', 'memo']);
+const isMarkdownDoc = (detail) => (detail.kind === 'text' || detail.kind === 'memo') && MARKDOWN_EXT.has(detail.ext);
 
 const FRAME_STYLE = `
   :root { color-scheme: light; }
@@ -935,6 +1022,9 @@ const FRAME_STYLE = `
         padding: 12px 14px; font-size: 12.5px; line-height: 1.55; background: rgba(127,127,127,.08); border-radius: 6px; }
   .fm dt { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; opacity: .7; }
   .fm dd { margin: 0; }
+  mark { background: #ffe58a; color: inherit; border-radius: 2px; }
+  :root[data-theme="dark"] mark { background: #6b5a16; }
+  #${PREVIEW_HIT_ID} { scroll-margin-top: 30vh; }
 `;
 
 const escapeHtml = (text) => text.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
@@ -960,13 +1050,52 @@ function splitFrontmatter(source) {
  * 렌더한 마크다운도 에이전트가 만든 내용이다. sandbox="" 는 스크립트를 통째로 막고,
  * 문서 안 meta CSP 가 외부 요청을 막는다 — srcdoc 은 서버 CSP 헤더가 덮지 못한다.
  */
+/**
+ * 렌더한 HTML 에서 검색어가 맞은 글자만 <mark> 로 감싼다. template 안은 스크립트가 돌지도, 그림을
+ * 받아오지도 않는 문서라 에이전트가 쓴 HTML 을 부모에서 풀어도 된다. 결과는 어차피 격리 프레임으로만 간다.
+ */
+const UNMARKED_PARENTS = new Set(['SCRIPT', 'STYLE', 'TEXTAREA', 'TITLE']);
+function markHtml(html) {
+  const pattern = queryPattern();
+  if (!pattern) return html;
+  const template = document.createElement('template');
+  template.innerHTML = html;
+  const walker = document.createTreeWalker(template.content, NodeFilter.SHOW_TEXT);
+  const texts = [];
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    if (!UNMARKED_PARENTS.has(node.parentNode.nodeName)) texts.push(node);
+  }
+  let budget = MAX_PREVIEW_MARKS;
+  for (const node of texts) {
+    if (budget <= 0) break;
+    const nodes = highlighted(node.data, budget);
+    const marks = nodes.filter((part) => part instanceof Node).length;
+    if (marks === 0) continue;
+    budget -= marks;
+    node.replaceWith(...nodes);
+  }
+  template.content.querySelector('mark')?.setAttribute('id', PREVIEW_HIT_ID);
+  return template.innerHTML;
+}
+
 function markdownFrame(source, title) {
   const { front, body } = splitFrontmatter(source);
-  const html = front + (globalThis.marked
+  const html = markHtml(front + (globalThis.marked
     ? globalThis.marked.parse(body, { gfm: true, breaks: false })
-    : `<pre>${escapeHtml(body)}</pre>`);
+    : `<pre>${escapeHtml(body)}</pre>`));
   const frame = el('iframe', { title, referrerPolicy: 'no-referrer' });
   frame.setAttribute('sandbox', '');
+  // 격리된 문서라 부모가 스크롤을 시킬 수 없다. 같은 문서 안 이동(#)만은 부모가 시킬 수 있고,
+  // 스크립트 없이 된다. 못 하는 브라우저에서는 맨 위에서 열릴 뿐이다.
+  if (hasQuery()) {
+    frame.addEventListener('load', () => {
+      try {
+        frame.contentWindow.location.href = `about:srcdoc#${PREVIEW_HIT_ID}`;
+      } catch {
+        // 맨 위에서 열린다.
+      }
+    }, { once: true });
+  }
   // 격리된 문서라 부모의 data-theme 을 못 본다. 그릴 때의 테마를 박아 넣는다.
   const theme = document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light';
   const lang = globalThis.i18n.lang() === 'ko' ? 'ko' : 'en';
@@ -1183,7 +1312,7 @@ function render(detail) {
       toggle(t(detail.favorite ? 'action.unfavorite' : 'action.favorite'), Boolean(detail.favorite), async () =>
         refreshKeepingSelection(await post(`/api/artifact/${detail.id}/favorite`, { on: !detail.favorite }))),
       el('button', { type: 'button', onclick: () => post(`/api/artifact/${detail.id}/reveal`, {}) }, t('action.reveal')),
-      detail.kind === 'text' && MARKDOWN_EXT.has(detail.ext) && toggle(t('action.raw'), state.rawMode, () => {
+      isMarkdownDoc(detail) && toggle(t('action.raw'), state.rawMode, () => {
         state.rawMode = !state.rawMode;
         render(detail);
       }),
@@ -1215,7 +1344,10 @@ function render(detail) {
         const box = document.getElementById('text-preview');
         if (!box || state.selected !== detail.id) return;
         const rendered = MARKDOWN_EXT.has(detail.ext) && !state.rawMode;
-        box.replaceChildren(rendered ? markdownFrame(text, detail.file_name) : el('pre', { className: 'preview-text' }, text));
+        box.replaceChildren(rendered
+          ? markdownFrame(text, detail.file_name)
+          : el('pre', { className: 'preview-text' }, ...highlighted(text, MAX_PREVIEW_MARKS)));
+        box.querySelector('pre mark')?.scrollIntoView({ block: 'center' });
       })
       .catch(() => {
         const box = document.getElementById('text-preview');
@@ -1337,7 +1469,10 @@ function goHome({ fromRoute = false } = {}) {
   state.selected = null;
   markSelected(null);
   if (!fromRoute) setRoute('#/');
-  void renderHome();
+  state.view = 'home';
+  updateWide();
+  // 활동 보기의 개요는 넓은 타임라인 자신이다. 가려진 본문에 개요를 그리지 않는다.
+  if (state.mode !== 'activity') void renderHome();
 }
 
 /**
@@ -1379,12 +1514,14 @@ function dashboard(activity) {
       el('h2', {}, t(state.q.trim() ? 'home.search' : Object.keys(state.filters).length ? 'home.filter' : 'home.library')),
       el('p', { className: 'dash-sub' },
         [state.period !== 'all' && t(`periodTitle.${state.period}`), t('home.count', { n: state.total }), t('home.finals', { n: finals.length }), t('home.repos', { n: repos.size })].filter(Boolean).join(' · '))),
-    activity ? activityPanel(activity) : el('p', { className: 'hint' }, t('home.activityFailed')),
-    distributions(),
-    // "최근 바뀐 것" 목록은 두지 않는다. 방금 일어난 일이 같은 파일을 무엇이 · 누가 · 언제까지 더 말한다.
+    // 목록이 먼저다. 이 화면을 여는 두 순간(찾을 때, 흘끗 볼 때) 모두 몇 달 치 추이보다 방금 바뀐 것과
+    // 최종본이 먼저 필요하다. "최근 바뀐 것" 목록은 두지 않는다 — 방금 일어난 일이 같은 파일을
+    // 무엇이 · 누가 · 언제까지 더 말한다.
     el('div', { className: 'dash-lists' },
       changesPanel(),
       homeList(t('home.finalsTitle'), finals.slice(0, HOME_LIST_COUNT), t('home.finalsEmpty'))),
+    activity ? activityPanel(activity) : el('p', { className: 'hint' }, t('home.activityFailed')),
+    distributions(),
     el('p', { className: 'keys' },
       el('span', {}, kbd('↑'), kbd('↓'), ` ${t('keys.move')}`),
       el('span', {}, kbd('←'), kbd('→'), ` ${t('keys.fold')}`),
@@ -1644,7 +1781,7 @@ function distributions() {
       agentColor: true,
     }),
     distribution(t('dist.workspace'), facets.workspaces.slice(0, DIST_ROWS).map((w) =>
-      ({ value: w.value, label: w.value.split('/').pop(), title: t('dist.workspaceTitle', { path: w.value }), n: w.n })), {
+      ({ value: w.value, label: workspaceLabel(w.value), title: t('dist.workspaceTitle', { path: w.value }), n: w.n })), {
       key: 'workspace',
     }));
 }
@@ -1686,8 +1823,16 @@ async function showCoverage({ fromRoute = false } = {}) {
   if (!fromRoute) setRoute('#/coverage');
   state.selected = null;
   state.view = 'coverage';
+  updateWide();
   markSelected(null);
-  const data = await api('/api/coverage');
+  const [data, status] = await Promise.all([api('/api/coverage'), api('/api/status')]);
+  // 무엇이 왜 빠졌는지에는 "읽으려다 실패했다"도 들어간다. 상단의 수집 오류 표시가 여기로 온다.
+  const errors = status.events.filter((event) => event.level === 'error');
+  const errorSection = errors.length > 0 && el('section', {},
+    el('h3', {}, t('coverage.errors')),
+    el('ul', {}, ...errors.map((event) => el('li', {},
+      el('span', { className: 'danger' }, `${event.code} · ${relativeWhen(event.at)}`),
+      el('div', { className: 'mono' }, [event.message, event.path].filter(Boolean).join(' — '))))));
   const sections = data.sources.map((source) =>
     el('section', {},
       el('p', { className: 'mono' }, source.sessionsRoot),
@@ -1705,7 +1850,7 @@ async function showCoverage({ fromRoute = false } = {}) {
       el('p', { className: 'hint' },
         t('coverage.note'))),
   );
-  $('detail').replaceChildren(el('div', { className: 'page' }, el('h2', {}, t('coverage.title')), ...sections.flat().filter(Boolean)));
+  $('detail').replaceChildren(el('div', { className: 'page' }, el('h2', {}, t('coverage.title')), errorSection, ...sections.flat().filter(Boolean)));
 }
 
 // ── 활동 보기 ────────────────────────────────────────────────────────────
@@ -1804,7 +1949,8 @@ $('q').addEventListener('input', (event) => {
   state.q = event.target.value;
   state.searchOpen = {};
   clearTimeout(debounce);
-  debounce = setTimeout(() => void refresh(), SEARCH_DEBOUNCE_MS);
+  // 검색어가 바뀌면 결과는 맨 위부터다. 트리를 내려 보던 자리가 남으면 가장 잘 맞은 결과가 위로 가려진다.
+  debounce = setTimeout(() => void refresh().then(() => { $('rows').scrollTop = 0; }), SEARCH_DEBOUNCE_MS);
 });
 $('coverage').addEventListener('click', () => void showCoverage());
 $('collapse-all').append(icon('collapse'));
@@ -1873,6 +2019,18 @@ function renderLive(status) {
   $('live').textContent = status === 'down'
     ? t('live.down')
     : lastCollectedAt ? t('live.collected', { when: relativeWhen(lastCollectedAt) }) : t('live.up');
+  renderCollectError();
+}
+
+// 수집은 30초마다 다시 성공하므로 초록 점만으로는 한 번 난 실패가 보이지 않는다. 글자로 따로 말한다.
+let collectError = null;
+const collectErrorButton = el('button', { type: 'button', className: 'link danger', hidden: true, onclick: () => void showCoverage() });
+$('live').after(collectErrorButton);
+function renderCollectError() {
+  collectErrorButton.hidden = !collectError;
+  if (!collectError) return;
+  collectErrorButton.textContent = t('live.error', { when: relativeWhen(collectError.at) });
+  collectErrorButton.title = [collectError.code, collectError.message, collectError.path].filter(Boolean).join(' · ');
 }
 
 function connectLive() {
@@ -1884,6 +2042,8 @@ function connectLive() {
     } catch {
       return;
     }
+    if ('error' in payload) collectError = payload.error;
+    if (payload.type === 'failed' || payload.type === 'hello') renderCollectError();
     if (payload.type !== 'collected') return;
     lastCollectedAt = payload.at;
     renderLive('up');
@@ -1976,7 +2136,7 @@ document.addEventListener('themechange', () => {
   renderThemeButton();
   // 렌더한 마크다운은 격리된 문서라 스스로 바뀌지 못한다. 보고 있으면 다시 그린다.
   const detail = state.detail;
-  if (state.view === 'detail' && detail && detail.kind === 'text' && MARKDOWN_EXT.has(detail.ext) && !state.rawMode) render(detail);
+  if (state.view === 'detail' && detail && isMarkdownDoc(detail) && !state.rawMode) render(detail);
 });
 renderThemeButton();
 await refresh();
