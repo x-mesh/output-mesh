@@ -133,7 +133,7 @@ bun bin/output-mesh.mjs compact         # 빈 페이지 회수 (VACUUM)
 - **뷰어의 자동 시작(`GraphViewer.processElements`)은 이 프레임에서 아무것도 그리지 않는다.** 예외를 자기 `try` 안에서 삼켜 이유도 남기지 않는다(실측: 5초를 기다려도 svg 0개). 대상이 하나뿐이라 `createViewerForElement` 를 직접 부르면 같은 순간에 나온다.
 - **본문은 태그 사이가 아니라 `value` 속성에 있다.** 마크업 취급으로 태그를 벗기면 도형 이름이 통째로 사라지고 `shape=image` 같은 style 문자열만 남는다. `drawioLabels` 가 라벨만 모으고, 라벨 안의 HTML 을 한 번 더 벗긴다.
 - **크기 상한은 텍스트와 다르다(`MAX_DRAWIO_BYTES`).** 뷰어가 받는 건 글자가 아니라 렌더러의 입력이다. 실측 306개의 중앙값 29KB · 90% 295KB · 최대 2.11MB 라 텍스트 상한(2MB)을 그대로 쓰면 가장 큰 것들이 `too large to preview` 가 된다. 그 2.11MB 는 도형 538개를 0.4초에 그린다.
-- **글꼴과 원격 도형 이미지는 빠진다.** 뷰어가 `fonts.googleapis.com`·`convert.diagrams.net` 을 참조하는데 CSP 가 막는다. 도형과 글자는 그대로 나온다.
+- **원격 도형 이미지는 받는다. 글꼴은 아니다.** `img-src` 에만 `https:` 를 허용하고 `font-src` 는 `data:` 로 둔다. `image=img/lib/…` 상대경로는 우리 주소 기준으로 풀려 404 가 되므로 `absoluteShapeImages` 가 `https://app.diagrams.net/` 로 되돌린다.
 
 **DB는 집합을 넓힐 수 있고 파일시스템은 못 넓힌다.** 플래그가 붙은 경로는 깊이와 무관하게 받아들여서 Aside의 레이아웃 변화를 코드 수정 없이 따라간다. 반대 방향은 막혀 있다.
 
@@ -195,7 +195,8 @@ macOS. bun ≥ 1.3. 시스템 `unzip`(xlsx 본문 추출). Aside가 없으면 �
 
 - 원본 폴더와 에이전트 데이터에 **쓰지 않는다**. `state.db`는 readonly 연결로만 연다.
 - 아티팩트 파일을 복사하지 않는다. 인덱스는 원본을 참조만 한다.
-- 아티팩트 HTML은 `connect-src 'none'` CSP와 `allow-same-origin` 없는 iframe에서만 렌더한다. 스크립트를 허용해도 네트워크는 열리지 않는다.
+- 아티팩트 HTML은 `connect-src 'none'` CSP와 `allow-same-origin` 없는 iframe에서만 렌더한다. 스크립트를 허용해도 스크립트가 네트워크를 부를 길은 열리지 않는다.
+- **예외는 drawio 의 도형 이미지 하나다.** `img-src` 에만 `https:` 를 허용한다. 막으면 구성도의 아이콘이 통째로 빈 칸이 되어(실측 306개 중 상대경로 221건 · 절대 주소 195건) 도면을 읽을 수 없었다. 대가는 분명하다 — 미리보기를 여는 순간 그 주소로 요청이 나가고, **주소는 문서를 만든 쪽이 정한다.** 이미지 말고는 아무것도 열지 않는다.
 - 서버는 `127.0.0.1`에만 바인딩한다.
 - 사용자 소유 데이터(태그·메모·즐겨찾기·final)는 스윕이 덮어쓰지 않는다.
 - 무엇이 왜 제외됐는지는 항상 확인 가능해야 한다 (PRD 7.1). `coverage`가 그 답이다.
