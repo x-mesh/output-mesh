@@ -12,7 +12,7 @@ let store;
 let file;
 
 beforeEach(() => {
-  dir = mkdtempSync(join(tmpdir(), 'a-out-origins-'));
+  dir = mkdtempSync(join(tmpdir(), 'output-mesh-origins-'));
   mkdirSync(join(dir, 'repo'), { recursive: true });
   file = join(dir, 'repo', 'README.md');
   writeFileSync(file, '# 문서');

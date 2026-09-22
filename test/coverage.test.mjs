@@ -13,7 +13,7 @@ const session = (name) => {
 };
 
 beforeEach(() => {
-  root = mkdtempSync(join(tmpdir(), 'a-out-coverage-'));
+  root = mkdtempSync(join(tmpdir(), 'output-mesh-coverage-'));
 });
 afterEach(() => {
   rmSync(root, { recursive: true, force: true });

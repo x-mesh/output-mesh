@@ -19,7 +19,7 @@ const codexLog = (lines) => {
 };
 
 beforeEach(() => {
-  dir = mkdtempSync(join(tmpdir(), 'a-out-logs-'));
+  dir = mkdtempSync(join(tmpdir(), 'output-mesh-logs-'));
   logs = join(dir, 'logs');
   repo = join(dir, 'repo');
   mkdirSync(logs, { recursive: true });

@@ -9,7 +9,7 @@ import { decodeEntities, extractBody, kindOf, looksBinary, stripTags, BODY_STATE
 let dir;
 let store;
 beforeEach(() => {
-  dir = mkdtempSync(join(tmpdir(), 'a-out-search-'));
+  dir = mkdtempSync(join(tmpdir(), 'output-mesh-search-'));
   store = new CatalogStore(join(dir, 'c.db'));
 });
 afterEach(() => {

@@ -14,7 +14,7 @@ import { TITLE_MAX_CHARS } from '../lib/paths.mjs';
 let dir;
 let store;
 beforeEach(() => {
-  dir = mkdtempSync(join(tmpdir(), 'a-out-describe-'));
+  dir = mkdtempSync(join(tmpdir(), 'output-mesh-describe-'));
   store = new CatalogStore(join(dir, 'c.db'));
 });
 afterEach(() => {
