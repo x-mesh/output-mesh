@@ -62,7 +62,7 @@ describe('수집 진행 보고', () => {
   let dir;
   let store;
   beforeEach(() => {
-    dir = mkdtempSync(join(tmpdir(), 'a-out-progress-'));
+    dir = mkdtempSync(join(tmpdir(), 'output-mesh-progress-'));
     store = new CatalogStore(join(dir, 'c.db'));
   });
   afterEach(() => {

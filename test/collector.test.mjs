@@ -34,7 +34,7 @@ function buildStateDb(turns) {
 }
 
 beforeEach(() => {
-  dir = mkdtempSync(join(tmpdir(), 'a-out-collect-'));
+  dir = mkdtempSync(join(tmpdir(), 'output-mesh-collect-'));
   artifactsDir = join(dir, 'u0', 'sessions', SESSION_DIR, 'artifacts');
   mkdirSync(artifactsDir, { recursive: true });
   store = new CatalogStore(join(dir, 'c.db'));

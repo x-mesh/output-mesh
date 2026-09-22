@@ -24,7 +24,7 @@ const post = (path, body) =>
   fetch(base + path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body ?? {}) });
 
 beforeAll(async () => {
-  dir = mkdtempSync(join(tmpdir(), 'a-out-server-'));
+  dir = mkdtempSync(join(tmpdir(), 'output-mesh-server-'));
   const artifactsDir = join(dir, 'u0', 'sessions', '2026-01-01_SRVTEST', 'artifacts');
   mkdirSync(artifactsDir, { recursive: true });
   writeFileSync(join(artifactsDir, 'sketch.html'), '<html><body><h1>스케치</h1><script>var x=1</script></body></html>');

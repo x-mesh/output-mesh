@@ -59,7 +59,7 @@ maybe('V1 — Aside 라이브 계약', () => {
   test('원본 DB 는 읽기 전용이다 — 쓰기 시도가 드라이버에서 막힌다', () => {
     const db = reader.open();
     try {
-      expect(() => db.exec('CREATE TABLE a_out_probe(x)')).toThrow(/readonly/i);
+      expect(() => db.exec('CREATE TABLE output_mesh_probe(x)')).toThrow(/readonly/i);
     } finally {
       db.close();
     }

@@ -9,7 +9,7 @@ let dir;
 let store;
 
 beforeEach(() => {
-  dir = mkdtempSync(join(tmpdir(), 'a-out-store-'));
+  dir = mkdtempSync(join(tmpdir(), 'output-mesh-store-'));
   store = new CatalogStore(join(dir, 'catalog.db'));
 });
 afterEach(() => {
