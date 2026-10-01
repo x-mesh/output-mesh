@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { resolveWorkspace } from '../lib/worktrees.mjs';
+import { linkedWorktrees, resolveWorkspace } from '../lib/worktrees.mjs';
 import { CatalogStore } from '../lib/store.mjs';
 import { Watcher } from '../lib/watcher.mjs';
 
@@ -128,5 +128,22 @@ describe('워처가 작업공간의 저장소를 찾아 둔다', () => {
 
     await new Watcher(store, [], { useFsWatch: false, withSessionLogs: false, home }).collect();
     expect(roots()[wt]).toBe(main);
+  });
+});
+
+describe('저장소에 딸린 worktree', () => {
+  test('git 이 적어 둔 목록에서 찾고, 폴더가 지워진 것은 뺀다', () => {
+    const main = repo(join(home, 'proj'));
+    const linked = (name, path) => {
+      mkdirSync(join(main, '.git', 'worktrees', name), { recursive: true });
+      writeFileSync(join(main, '.git', 'worktrees', name, 'gitdir'), `${join(path, '.git')}\n`);
+    };
+    worktree(join(home, '.gk', 'worktree', 'proj', 'feat'), join(main, '.git', 'worktrees', 'feat'));
+    linked('feat', join(home, '.gk', 'worktree', 'proj', 'feat'));
+    worktree(join(main, '.claude', 'worktrees', 'agent'), join(main, '.git', 'worktrees', 'agent'));
+    linked('agent', join(main, '.claude', 'worktrees', 'agent'));
+    linked('gone', join(home, 'removed'));
+    expect(linkedWorktrees(main)).toEqual([join(home, '.gk', 'worktree', 'proj', 'feat'), join(main, '.claude', 'worktrees', 'agent')].sort());
+    expect(linkedWorktrees(join(home, 'not-a-repo'))).toEqual([]);
   });
 });
