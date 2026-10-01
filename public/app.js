@@ -669,6 +669,7 @@ function renderFilters(data) {
   const focused = $('facets').contains(document.activeElement) ? document.activeElement.dataset.facet : null;
   $('facets').replaceChildren(...keep([favorite, ...sections]));
   renderTemporaryToggle();
+  renderRulesLink();
   if (focused) $('facets').querySelector(`[data-facet="${CSS.escape(focused)}"]`)?.focus();
   renderActiveFilters();
 
@@ -1135,6 +1136,10 @@ function menuItems(entry) {
       refreshKeepingSelection(await post(`/api/artifact/${row.id}/favorite`, { on: !row.favorite }))],
     [t('action.reveal'), () => post(`/api/artifact/${row.id}/reveal`, {})],
     [t('action.copyPath'), () => navigator.clipboard.writeText(row.abs_path)],
+    [t('action.hideFolder'), async () => {
+      await post('/api/rules', { kind: 'path', pattern: row.abs_path.replace(/\/[^/]*$/, '') });
+      await refresh();
+    }],
   ];
 }
 
@@ -2183,6 +2188,7 @@ function dashboard() {
   // 임시 이미지를 숨겼으면 그 위젯도 빼고, 숨긴 수를 머리 줄에 한 줄로 남긴다. 빈 위젯이 자리만 차지하지 않게.
   const on = homeBlocks().filter((block) => block.on && (block.id !== 'scratch' || state.showTemporary)).map((block) => block.id);
   const hiddenTemporary = state.showTemporary ? 0 : state.facets?.temporaryHidden ?? 0;
+  const hiddenByRules = state.facets?.hiddenRules?.total ?? 0;
 
   return el('div', { className: 'dash' },
     el('header', { className: 'dash-head' },
@@ -2192,7 +2198,9 @@ function dashboard() {
         el('p', { className: 'dash-sub' },
           [state.period !== 'all' && t(`periodTitle.${state.period}`), t('home.count', { n: state.total }), t('home.finals', { n: finals.length }), t('home.repos', { n: repos.size })].filter(Boolean).join(' · '),
           hiddenTemporary > 0 && ' · ',
-          hiddenTemporary > 0 && el('button', { type: 'button', className: 'link', title: t('facet.temporaryTitle'), onclick: () => setShowTemporary(true) }, t('home.temporaryHidden', { n: hiddenTemporary })))),
+          hiddenTemporary > 0 && el('button', { type: 'button', className: 'link', title: t('facet.temporaryTitle'), onclick: () => setShowTemporary(true) }, t('home.temporaryHidden', { n: hiddenTemporary })),
+          hiddenByRules > 0 && ' · ',
+          hiddenByRules > 0 && el('button', { type: 'button', className: 'link', title: t('rules.linkTitle'), onclick: () => void showRules() }, t('home.rulesHidden', { n: hiddenByRules })))),
       homeConfig()),
     on.length === 0
       ? el('div', { className: 'dash-off' },
@@ -2552,6 +2560,7 @@ function currentRoute() {
   const match = location.hash.match(/^#\/a\/(\d+)$/);
   if (match) return { name: 'artifact', id: Number(match[1]) };
   if (location.hash === '#/coverage') return { name: 'coverage' };
+  if (location.hash === '#/rules') return { name: 'rules' };
   return { name: 'home' };
 }
 
@@ -2566,6 +2575,7 @@ async function applyRoute() {
   try {
     if (route.name === 'artifact') await select(route.id, { reveal: true, fromRoute: true });
     else if (route.name === 'coverage') await showCoverage({ fromRoute: true });
+    else if (route.name === 'rules') await showRules({ fromRoute: true });
     else goHome({ fromRoute: true });
   } catch {
     // 지워진 파일의 주소나 손으로 고친 주소. 개요로 돌아간다.
@@ -2609,6 +2619,75 @@ async function showCoverage({ fromRoute = false } = {}) {
         t('coverage.note'))),
   );
   $('detail').replaceChildren(el('div', { className: 'page' }, el('h2', {}, t('coverage.title')), errorSection, ...sections.flat().filter(Boolean)));
+}
+
+// ── 숨김 규칙 ────────────────────────────────────────────────────────────
+// 수집은 그대로 하고 보기에서만 가린다. 규칙마다 가린 수를 적고 켜고 끌 수 있다 — 이름이 들어갔다고
+// 조용히 사라지는 파일이 없어야 한다. 규칙은 카탈로그에 사용자 데이터로 저장된다.
+
+const ruleName = (rule) => (rule.kind === 'folder' ? t('rules.folderName', { name: rule.pattern }) : t('rules.underPath', { path: rule.pattern }));
+
+/** 규칙을 바꾼 뒤 목록 · 건수 · 개요가 한꺼번에 따라 바뀌게 한다. */
+async function changedRules() {
+  await refresh();
+  if (state.view === 'rules') await showRules({ fromRoute: true });
+}
+
+async function showRules({ fromRoute = false } = {}) {
+  if (!fromRoute) setRoute('#/rules');
+  state.selected = null;
+  state.view = 'rules';
+  updateWide();
+  markSelected(null);
+  const { rules, hiddenTotal } = await api(`/api/rules${state.showTemporary ? '?temporary=1' : ''}`);
+  const error = el('p', { className: 'danger', attrs: { role: 'alert' } });
+  const kind = el('select', { attrs: { 'aria-label': t('rules.kind') } },
+    el('option', { value: 'folder' }, t('rules.kindFolder')), el('option', { value: 'path' }, t('rules.kindPath')));
+  const pattern = el('input', { type: 'text', autocomplete: 'off', spellcheck: false, placeholder: t('rules.placeholder') });
+  const add = async (event) => {
+    event.preventDefault();
+    try {
+      await post('/api/rules', { kind: kind.value, pattern: pattern.value });
+      await changedRules();
+    } catch (failure) {
+      error.textContent = t('rules.invalid', { reason: failure.message });
+    }
+  };
+  const rows = rules.map((rule) => el('li', { className: `rule${rule.enabled ? '' : ' off'}` },
+    el('label', { className: 'rule-main' },
+      el('input', {
+        type: 'checkbox',
+        checked: Boolean(rule.enabled),
+        onchange: async (event) => {
+          await api(`/api/rules/${rule.id}`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ enabled: event.target.checked }) });
+          await changedRules();
+        },
+      }),
+      el('span', { className: 'rule-name mono' }, ruleName(rule)),
+      Boolean(rule.builtin) && el('span', { className: 'badge' }, t('rules.builtin'))),
+    el('span', { className: 'rule-count' }, rule.enabled ? t('rules.hides', { n: rule.hidden }) : t('rules.off')),
+    !rule.builtin && el('button', {
+      type: 'button',
+      className: 'link',
+      onclick: async () => {
+        await api(`/api/rules/${rule.id}`, { method: 'DELETE' });
+        await changedRules();
+      },
+    }, t('rules.delete'))));
+  $('detail').replaceChildren(el('div', { className: 'page rules-page' },
+    el('h2', {}, t('rules.title')),
+    el('p', { className: 'hint' }, t('rules.intro', { n: hiddenTotal })),
+    el('ul', { className: 'rule-list' }, ...rows),
+    el('form', { className: 'rule-add', onsubmit: add }, kind, pattern, el('button', { type: 'submit' }, t('rules.add'))),
+    error,
+    el('p', { className: 'hint' }, t('rules.note'))));
+}
+
+$('rules-link').addEventListener('click', () => void showRules());
+
+function renderRulesLink() {
+  const hiding = state.facets?.hiddenRules?.total ?? 0;
+  $('rules-link').textContent = hiding > 0 ? t('rules.linkCount', { n: hiding }) : t('rules.link');
 }
 
 // ── 활동 보기 ────────────────────────────────────────────────────────────
@@ -3148,6 +3227,7 @@ document.addEventListener('langchange', () => {
   if ($('live').dataset.status) renderLive($('live').dataset.status);
   if (state.view === 'detail' && state.detail) render(state.detail);
   else if (state.view === 'coverage') void showCoverage({ fromRoute: true });
+  else if (state.view === 'rules') void showRules({ fromRoute: true });
   void refresh();
 });
 renderLang();

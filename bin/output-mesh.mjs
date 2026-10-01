@@ -13,6 +13,7 @@ import { CATALOG_DB, COMPACT_HINT_RATIO, DEFAULT_HOST, DEFAULT_PORT, INGEST_ERRO
 import { collectErrorsText, collectProgressText, count, createSpinner } from '../lib/spinner.mjs';
 import { NAME, VERSION } from '../lib/version.mjs';
 import { isNewer, latestVersion } from '../lib/update-check.mjs';
+import { hideRuleCounts } from '../lib/search.mjs';
 import { looksEphemeral, serviceCommand, servicePlan } from '../lib/service.mjs';
 import { acquireWriterLock, clearRun, readRun, releaseWriterLock, writeRun } from '../lib/running.mjs';
 
@@ -53,6 +54,13 @@ function startupLines(store, readers, port, collectStartedAt, latest = null) {
     lines.push(`  Storage   ${mb(storage.freeBytes)} of ${mb(storage.bytes)} is reclaimable — run \`${NAME} compact\``);
   }
   if (errors) lines.push(`  Errors    ${errors} — run \`${NAME} doctor\``);
+  // 숨긴 것을 시작할 때 말한다. 규칙은 파일이 아니라 카탈로그에 있어서, 알려 주지 않으면 왜 안 보이는지 모른다.
+  const hiding = hideRuleCounts(store, '', { view: 'library' });
+  const active = store.hideRules().filter((rule) => rule.enabled);
+  if (active.length > 0) {
+    const names = active.map((rule) => rule.pattern).join(', ');
+    lines.push(`  Hidden    ${count(hiding.total)} files by ${count(active.length)} rules (${names}) — change them at http://${DEFAULT_HOST}:${port}/#/rules`);
+  }
   if (latest && isNewer(latest, VERSION)) lines.push(`  Update    ${latest} is available — run \`bunx ${NAME}@latest\` (or \`bun update -g ${NAME}\`)`);
   lines.push('', `  Open      http://${DEFAULT_HOST}:${port}`, '  Stop      Ctrl-C', '');
   return lines;
@@ -135,7 +143,7 @@ async function runService(verb) {
 }
 
 const dbPath = flag('--db', CATALOG_DB);
-const catalogCommands = new Set(['serve', 'sweep', 'import', 'doctor', 'compact']);
+const catalogCommands = new Set(['serve', 'sweep', 'import', 'doctor', 'compact', 'rules']);
 const writerCommands = new Set(['serve', 'sweep', 'import', 'doctor', 'compact']);
 let catalogLock = null;
 let store = null;
@@ -295,6 +303,16 @@ switch (command) {
     break;
   }
 
+  case 'rules': {
+    const counts = new Map(hideRuleCounts(store, '', { view: 'library' }).rules.map((rule) => [rule.id, rule.n]));
+    for (const rule of store.hideRules()) {
+      const where = rule.kind === 'folder' ? `any folder named ${rule.pattern}` : `under ${rule.pattern}`;
+      console.log(`${rule.enabled ? 'on ' : 'off'}  ${where}${rule.builtin ? '  (built-in)' : ''}${rule.enabled ? `  — hides ${count(counts.get(rule.id) ?? 0)} files` : ''}`);
+    }
+    store.close();
+    break;
+  }
+
   default:
     console.error(`Unknown command: ${command}\n`
       + `Usage: ${NAME} <command> [--port N] [--db PATH]\n\n`
@@ -303,7 +321,8 @@ switch (command) {
       + '  import     add a file or folder by hand\n'
       + '  coverage   what was collected and what was left out\n'
       + '  doctor     health check\n'
-      + '  compact    reclaim free pages in the database\n\n'
+      + '  compact    reclaim free pages in the database\n'
+      + '  rules      list the hide rules (change them in the web UI)\n\n'
       + '  install    run it as a background service, now and at login\n'
       + '  start · stop · restart · status\n'
       + '  uninstall  remove the service');

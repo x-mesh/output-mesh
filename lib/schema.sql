@@ -84,6 +84,18 @@ CREATE TABLE IF NOT EXISTS workspace_roots (
   checked_at INTEGER NOT NULL
 );
 
+-- 숨김 규칙. 태그와 같은 사용자 데이터라 수집이 덮어쓰지 않는다. 기본 규칙(builtin)도 같은 표에 둔다 —
+-- 끄는 것은 사용자의 선택이므로 다시 켜지 않고, 지우지는 못하게 한다.
+CREATE TABLE IF NOT EXISTS hide_rules (
+  id         INTEGER PRIMARY KEY,
+  kind       TEXT NOT NULL CHECK (kind IN ('folder', 'path')),
+  pattern    TEXT NOT NULL,
+  enabled    INTEGER NOT NULL DEFAULT 1,
+  builtin    INTEGER NOT NULL DEFAULT 0,
+  created_at INTEGER NOT NULL,
+  UNIQUE (kind, pattern)
+);
+
 CREATE TABLE IF NOT EXISTS tags (
   id       INTEGER PRIMARY KEY,
   name     TEXT NOT NULL,

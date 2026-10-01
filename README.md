@@ -133,6 +133,16 @@ The inspector lists each session that changed the file. It also shows tags, note
 
 The Activity view is a live timeline of agent sessions and the files that each session wrote. The newest task is at the top. Each session shows its scratch-folder images apart from its other files, with a "temporary" mark. Use **Small | Large** in the Activity header to change the preview size. Large previews are big enough to see what a screenshot shows. When new work arrives, output-mesh highlights the new cards and images for a few seconds. If you scrolled down, the card that you read stays in place, and a "new tasks" button at the top takes you back. To jump to the top each time new work arrives, turn on **Follow** in the Activity header. If you do not select a file, the timeline uses the full width. If you select a file, the timeline moves to the left column and the file opens on the right.
 
+### Hide rules
+
+Some folders hold files that you do not want in the library, for example `vendor/`. Hide rules hide them from the view. Collection does not change, and a rule that you turn off brings the files back at once.
+
+- Four rules are on by default: the folders named `vendor`, `third_party`, `Pods`, and `site-packages`. The folders `.xm` and `.claude` are in the list but off. You can turn each one on or off.
+- A folder-name rule matches only a folder with exactly that name. It does not hide `vendor-notes.md` or `vendors/`. A path rule hides everything under one folder.
+- A file that is a favorite, tagged, noted, final, or marked as a deliverable stays visible, even if a rule matches.
+- Each rule shows how many files it hides. The startup screen, the explorer footer, and the overview header show the total, and a click opens the rules screen (`#/rules`), where you add, turn off, or delete rules. To hide one folder, right-click a file and select **Hide this folder**.
+- Rules live in the catalog, not in a file. `output-mesh rules` lists them. The Activity view ignores the rules.
+
 ### Collection errors
 
 If a collection error occurs, the top bar shows "Collection error" for one hour. Click it to see the recent errors. After that, the top bar shows the live status again until a newer error occurs.
@@ -167,6 +177,7 @@ output-mesh import <path>    # add a folder or a file (output-mesh does not copy
 output-mesh coverage         # what output-mesh collected and what it left out
 output-mesh doctor           # health check: sources, database, search index, recent errors
 output-mesh compact          # reclaim free space in the catalog database
+output-mesh rules            # list the hide rules (change them in the web UI)
 output-mesh install          # run as a service, now and after each login
 output-mesh start|stop|restart|status
 output-mesh uninstall        # remove the service
