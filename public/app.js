@@ -258,7 +258,7 @@ function locationNodes(row) {
   return keep([
     where.repo && el('span', { className: 'where-repo' }, where.repo),
     where.worktree && el('span', { className: 'where-worktree', title: t('where.worktree', { name: where.worktree }) }, worktreeLabel(where.worktree)),
-    where.scratch && el('span', { className: 'where-scratch', title: t('where.scratchTitle') }, t('where.scratch')),
+    where.scratch && scratchMark(where.generated),
     el('span', { className: 'where-dir', title: row.abs_path }, where.dir),
   ]);
 }
@@ -1835,6 +1835,12 @@ function changesPanel() {
   return el('section', { className: 'changes' }, el('h3', {}, t('changes.title')), scroller, hiddenChangesLine());
 }
 
+/** 임시 이미지 표시. Codex 생성 그림은 지워지지 않으므로 '임시'가 아니라 '생성'이라 적는다. 다루는 규칙은 같다. */
+const scratchMark = (generated) => el('span', {
+  className: 'where-scratch',
+  title: t(generated ? 'where.generatedTitle' : 'where.scratchTitle'),
+}, t(generated ? 'where.generated' : 'where.scratch'));
+
 /**
  * 한 세션 작업 폴더의 이미지가 잇달아 생기거나 사라지면 한 줄로 묶는다. 스크린샷은 수십 장씩 찍히고,
  * 재부팅하면 작업 폴더가 통째로 지워져 수백 줄이 쏟아진다. 묶음은 받은 쪽을 이어 붙인 목록에서 만들어서
@@ -1861,10 +1867,10 @@ function scratchGroupRow(group) {
     onclick: () => select(first.artifact_id, { reveal: true }),
   },
     el('span', { className: `change-kind change-${first.change}` }, t(`change.${first.change}`)),
-    el('span', { className: 'change-name' }, t('changes.scratchImages', { n: group.length })),
+    el('span', { className: 'change-name' }, t(first.location.generated ? 'changes.generatedImages' : 'changes.scratchImages', { n: group.length })),
     el('span', { className: 'change-where' }, ...keep([
       first.location.repo && el('span', { className: 'where-repo' }, first.location.repo),
-      el('span', { className: 'where-scratch', title: t('where.scratchTitle') }, t('where.scratch')),
+      scratchMark(first.location.generated),
     ])),
     el('span', { className: 'change-tags' }, ...changeAgents(first)),
     el('span', { className: 'when', title: fmtDate(first.at) }, relativeWhen(first.at))));
@@ -2643,7 +2649,8 @@ function scratchStrip(session) {
   const more = session.scratch_count - session.scratch.length;
   return el('div', { className: 'session-scratch' },
     el('div', { className: 'session-scratch-head' },
-      el('span', { className: 'where-scratch', title: t('where.scratchTitle') }, t('where.scratch')),
+      // 한 세션의 그림은 한 종류다. Codex 세션은 생성 그림, Claude Code 세션은 작업 폴더 그림이다.
+      scratchMark(session.collector === 'codex'),
       el('span', {}, t('scratch.count', { n: session.scratch_count }))),
     el('div', { className: 'scratch-thumbs' },
       ...session.scratch.map((file) => {
