@@ -16,6 +16,7 @@ lives in `package.json`; `output-mesh --version` and the explorer footer show it
 - **explorer:** pick several values in one filter group, for example Codex and Claude Code. Values in one group match any of them, and different groups must all match
 - **explorer:** show agent logos in the filter panel and on filter tokens
 - **explorer:** show the Aside logo for Aside sessions and the Aside app, and use logos on the first level of the app grouping
+- **overview:** draw the widget resize handle as a diagonal corner grip, so it reads as two-way resizing and stands out
 - **collect:** collect Gemini Antigravity session artifacts and the files that its write tools changed. A broken transcript line is skipped with one warning that names the file and line
 
 ## [0.7.0] - 2026-10-01
