@@ -30,6 +30,8 @@ lives in `package.json`; `output-mesh --version` and the explorer footer show it
 - **cli:** `coverage` and `compact` print English, like the rest of the terminal output
 - **ui:** the English change feed is now "Recent changes" (was "Just happened")
 - **docs:** bring both READMEs up to date (service install, overview widgets, filters panel, several machines, collection errors, `compact`) and rewrite awkward phrasing
+- **activity:** the Activity view always shows temporary images, with a **Small | Large** preview size. Large previews show what a screenshot is. New cards and images are highlighted for a few seconds, and while you scroll down, the card you read stays in place under a "new tasks" button
+- **ui:** the temporary-images switch moved from the filter panel to the end of the filter row, where it is always visible
 - **ui:** temporary images are hidden by default. **Show temporary images** in the filter panel shows them in the list, the feed, Activity, and the counts, and the choice is remembered. The overview header and the feed say how many are hidden
 - **overview:** a Temporary images widget, on by default, shows the scratch-folder images grouped by session as small previews. In the Activity view, each session shows these images apart from its other files, with a "temporary" mark
 - **collect:** show images from Claude Code session scratch folders, for example screenshots that an agent took with a script. They carry a "temporary" mark, are not copied, and leave the library when the folder is deleted. The change feed shows one line per set of images from a session
