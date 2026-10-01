@@ -75,7 +75,7 @@ output-mesh install
 | Claude Desktop | `~/Library/Application Support/Claude/Cache/Cache_Data/` | 로컬 캐시에 남은 아티팩트 HTML, 채팅이 쓴 파일, 채팅 위젯 |
 | Gemini Antigravity | `~/.gemini/{antigravity,antigravity-cli,antigravity-ide}/brain/` | 로컬 세션 산출물과 쓰기 도구가 기록한 파일 경로 |
 | Cursor | `~/Library/Application Support/Cursor/.../state.vscdb` | composer가 고치거나 새로 만든 파일. 데이터베이스는 읽기 전용으로 연다 |
-| 내 저장소 | 위 에이전트들이 작업한 저장소 | 최근 7일 안에 바뀐 문서. 그 뒤로는 폴더를 감시해서 새로 생기거나 바뀐 문서를 찾는다 |
+| 내 저장소 | 위 에이전트들이 작업한 저장소와 그 저장소의 git worktree | 최근 7일 안에 바뀐 문서. 그 뒤로는 폴더를 감시해서 새로 생기거나 바뀐 문서를 찾는다 |
 | 그 밖의 파일 | 직접 고른 폴더나 파일 | `output-mesh import <경로>` |
 
 Codex와 Claude Code는 산출물을 따로 모아 두지 않는다. 대신 로그에 어느 경로에 썼는지가 남는다. output-mesh는 아직 저장소에 있는 그 파일에 에이전트와 세션을 붙이고, 파일은 그 자리에 둔다.
@@ -94,7 +94,7 @@ Gemini 수집은 Antigravity, Antigravity CLI, Antigravity IDE의 로컬 데이�
 
 Antigravity 대화 기록에는 JSON이 아닌 줄이 가끔 섞여 있다. output-mesh는 그 줄만 건너뛰고 줄마다 경고를 한 번 남긴다. 경고는 수집 오류가 아니다.
 
-git worktree는 본 저장소의 일부로 센다. 트리에서는 그 저장소 아래에 `⑂ 이름` 묶음으로 나온다. Claude Code의 세션 임시 폴더(`/private/tmp/claude-*/`)는 모으지 않는다.
+git worktree는 본 저장소의 일부로 센다. 트리에서는 그 저장소 아래에 `⑂ 이름` 묶음으로 나온다. 에이전트가 일한 저장소라면 그 저장소의 worktree도 모두 감시한다. worktree를 처음 읽을 때는 만든 뒤에 바뀐 문서만 모은다. 나머지는 체크아웃으로 생긴 사본이기 때문이다. Claude Code의 세션 임시 폴더(`/private/tmp/claude-*/`)는 모으지 않는다.
 
 ## 쓰는 법
 
