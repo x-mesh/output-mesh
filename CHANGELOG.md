@@ -8,6 +8,8 @@ lives in `package.json`; `output-mesh --version` and the explorer footer show it
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-10-01
+
 ### Added
 
 - **collect:** read Claude Desktop artifacts from its local HTTP cache. output-mesh keeps a local copy of each complete artifact HTML and never calls Claude APIs
