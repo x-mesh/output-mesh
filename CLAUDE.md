@@ -27,6 +27,7 @@ bun bin/output-mesh.mjs start|stop|restart|status|uninstall
 | `lib/scanner.mjs` | 순수 경로 분류. 파일시스템을 만지지 않는다 |
 | `lib/aside-reader.mjs` | Aside `state.db` 읽기 전용 |
 | `lib/cursor-reader.mjs` | Cursor `state.vscdb` 읽기 전용. composer 가 고친 파일 |
+| `lib/claude-desktop-reader.mjs` | Claude 데스크톱 앱의 HTTP 캐시 읽기 전용. 완전한 아티팩트 HTML 을 카탈로그 폴더에 옮겨 적는다 |
 | `lib/session-logs.mjs` | Codex rollout · Claude Code transcript 에서 쓴 경로 수확 |
 | `lib/collector.mjs` | 스윕 · 보강 · 색인 |
 | `lib/store.mjs` + `schema.sql` | SQLite 인덱스 |
@@ -69,6 +70,14 @@ bun bin/output-mesh.mjs start|stop|restart|status|uninstall
 - **커서는 밀리초다.** `lastUpdatedAt` 을 그대로 쓴다. 초로 줄이면 같은 밀리초의 대화가 가려진다.
 - **작업공간은 되짚어 채운다.** Cursor 가 cwd 를 주지 않아서 파일이 놓인 곳에서 `resolveWorkspace` 로 저장소를 찾는다. 추론이지만 이래야 위치가 실제 경로가 아니라 저장소 이름으로 보이고 worktree 도 본 저장소로 모인다.
 - **색은 중립 회색이다.** 검증한 세 에이전트 색 사이에 넷째를 끼우면 적색맹 인접 ΔE 가 좁아진다.
+
+**Claude 데스크톱 앱은 캐시에서 읽고 사본을 둔다.** 앱이 아티팩트를 파일로 남기지 않아서 남는 자리는 Chromium HTTP 캐시(`~/Library/Application Support/Claude/Cache/Cache_Data/`)뿐이다. Claude 의 private API 나 sync WebSocket 은 부르지 않는다.
+
+- **허용한 주소만 읽는다.** `claude.ai/.../user_artifacts` 메타데이터와 `<uuid>.frame.claudeusercontent.com` 프레임 본문이다. `</html>` 까지 온 HTML 만 받는다.
+- **사본을 둔다.** 캐시 항목은 참조할 수 있는 파일이 아니고, 캐시는 언제든 밀려난다. UUID 마다 가장 새 버전을 `AgentOutputCatalog/claude-app-artifacts/<uuid>.html` 로 옮겨 적고 그 파일을 색인한다. "아티팩트 파일을 복사하지 않는다"의 유일한 예외다.
+- **건너뛰는 기준은 카탈로그다.** 사본은 카탈로그를 다시 만들어도 남는다. 사본이 같다는 것만으로 건너뛰면 새 카탈로그가 그 아티팩트를 영영 받지 못한다. 카탈로그가 그 버전을 받았고(`claude.version.<uuid>`) 사본도 같을 때만 건너뛴다.
+- **세션 로그와 같은 조건으로 돈다.** 실제 홈의 캐시(실측 18,046개, 837MB)를 훑고 카탈로그 폴더에 쓰기 때문이다. 조건이 없을 때는 `withSessionLogs` 를 끈 워처 테스트가 실제 폴더에 사본을 남겼다.
+- **색은 Claude 색이다.** 다섯째 색을 들이지 않는 이유는 Cursor 와 같다. Claude Code 와 색이 겹치므로 `AGENT_ORDER` 에서 둘 사이에 다른 에이전트를 둔다. 활동이 둘뿐인 기간에는 그래도 붙어 보인다.
 
 **Codex·Claude Code 는 산출물이 아니라 출처를 준다.** 둘 다 산출물 레코드가 없지만 세션 로그에 쓴 경로가 남는다 — Codex 는 `apply_patch` 본문의 `*** Add/Update File:` 마커(1,236개 중 321개), Claude Code 는 `tool_use` 블록의 `file_path`. 그 경로의 파일은 이미 저장소 안에 있으므로 옮기지 않고 출처만 붙인다. Aside 가 주지 못하는 `workspace` 가 여기서 채워진다. 자동 발견분은 산출물 플래그가 없으므로 절대 `final` 로 올리지 않는다.
 
@@ -221,6 +230,7 @@ macOS. bun ≥ 1.3. 시스템 `unzip`(xlsx 본문 추출). Aside가 없으면 �
 
 - 원본 폴더와 에이전트 데이터에 **쓰지 않는다**. `state.db`는 readonly 연결로만 연다.
 - 아티팩트 파일을 복사하지 않는다. 인덱스는 원본을 참조만 한다.
+- **복사의 예외는 Claude 데스크톱 앱 하나다.** 원본이 파일이 아니라 앱의 HTTP 캐시 항목이라 참조할 경로가 없다. 완전한 HTML 본문만 카탈로그 폴더의 `claude-app-artifacts/` 에 옮겨 적고, Claude 의 폴더에는 쓰지 않는다.
 - 아티팩트 HTML은 `connect-src 'none'` CSP와 `allow-same-origin` 없는 iframe에서만 렌더한다. 스크립트를 허용해도 스크립트가 네트워크를 부를 길은 열리지 않는다.
 - **예외는 drawio 의 도형 이미지 하나다.** `img-src` 에만 `https:` 를 허용한다. 막으면 구성도의 아이콘이 통째로 빈 칸이 되어(실측 306개 중 상대경로 221건 · 절대 주소 195건) 도면을 읽을 수 없었다. 대가는 분명하다 — 미리보기를 여는 순간 그 주소로 요청이 나가고, **주소는 문서를 만든 쪽이 정한다.** 이미지 말고는 아무것도 열지 않는다.
 - 서버는 `127.0.0.1`에만 바인딩한다.

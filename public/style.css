@@ -733,6 +733,9 @@ embed.preview-fill { height: 100%; }
 [data-provider="ai-mesh"] { --series: var(--aimesh); }
 /* Cursor 는 중립 회색이다. 검증한 세 색 사이에 넷째를 끼우면 적색맹 인접 ΔE 가 좁아진다. */
 [data-provider="cursor"] { --series: var(--cursor); }
+/* Claude Desktop 은 같은 회사의 Claude 색을 쓴다. 다섯째 색을 들이지 않으려는 이유는 Cursor 와 같다.
+   Claude Code 와 색이 겹치므로 AGENT_ORDER 에서 둘 사이에 다른 에이전트를 둔다. */
+[data-provider="claude-app"] { --series: var(--claude); }
 .swatch[data-provider], .tip-key[data-provider], .dist-bar[data-provider] { background: var(--series, var(--aside)); }
 
 .chart { position: relative; min-height: 192px; }
