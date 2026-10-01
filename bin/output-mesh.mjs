@@ -12,6 +12,7 @@ import { surveyCoverage, REASON_LABEL } from '../lib/coverage.mjs';
 import { CATALOG_DB, COMPACT_HINT_RATIO, DEFAULT_HOST, DEFAULT_PORT, INGEST_ERROR_VISIBLE_S, MEGABYTE } from '../lib/paths.mjs';
 import { collectErrorsText, collectProgressText, count, createSpinner } from '../lib/spinner.mjs';
 import { NAME, VERSION } from '../lib/version.mjs';
+import { isNewer, latestVersion } from '../lib/update-check.mjs';
 import { looksEphemeral, serviceCommand, servicePlan } from '../lib/service.mjs';
 import { acquireWriterLock, clearRun, readRun, releaseWriterLock, writeRun } from '../lib/running.mjs';
 
@@ -33,7 +34,7 @@ function flag(name, fallback) {
  * 시작 화면. 무엇이 모였고 무엇을 하면 되는지만 적는다 — 주소를 눈에 띄게 두는 것이 이 화면의
  * 일이다. 볼 것이 있을 때만 줄을 늘린다(빠진 수집기, 회수할 빈 자리, 지난 오류).
  */
-function startupLines(store, readers, port, collectStartedAt) {
+function startupLines(store, readers, port, collectStartedAt, latest = null) {
   const counts = store.counts();
   const storage = store.storage();
   const sources = sourcesStatus(store, readers);
@@ -52,6 +53,7 @@ function startupLines(store, readers, port, collectStartedAt) {
     lines.push(`  Storage   ${mb(storage.freeBytes)} of ${mb(storage.bytes)} is reclaimable — run \`${NAME} compact\``);
   }
   if (errors) lines.push(`  Errors    ${errors} — run \`${NAME} doctor\``);
+  if (latest && isNewer(latest, VERSION)) lines.push(`  Update    ${latest} is available — run \`bunx ${NAME}@latest\` (or \`bun update -g ${NAME}\`)`);
   lines.push('', `  Open      http://${DEFAULT_HOST}:${port}`, '  Stop      Ctrl-C', '');
   return lines;
 }
@@ -198,13 +200,16 @@ switch (command) {
     if (store.counts().artifacts === 0) {
       spinner.note('First run: reading every agent log. This can take a few minutes.');
     }
+    // 수집과 나란히 조회한다. 수집이 끝나도 안 왔으면 시간 상한까지만 더 기다린다 — 수집이 빠른 시작에서는
+    // 조회가 먼저 끝나지 못해 안내가 거의 나오지 않았다(기다리지 않게 했을 때 실제로 그랬다).
+    const latest = latestVersion();
     const started = performance.now();
     const collectStartedAt = Math.floor(Date.now() / 1000);
     spinner.start('Preparing to collect');
     await watcher.start({ onProgress: (progress) => spinner.update(...collectProgressText(progress)) });
     const seconds = ((performance.now() - started) / 1000).toFixed(1);
     spinner.stop(`Collected in ${seconds}s`);
-    for (const line of startupLines(store, readers, port, collectStartedAt)) console.log(line);
+    for (const line of startupLines(store, readers, port, collectStartedAt, await latest)) console.log(line);
     break;
   }
 
