@@ -41,7 +41,7 @@ bun bin/output-mesh.mjs start|stop|restart|status|uninstall
 | `lib/worktrees.mjs` | 작업공간이 어느 저장소의 것인가. `.git` 포인터만 읽는다 |
 | `lib/server.mjs` | HTTP API + 아티팩트 서빙 |
 | `public/` | 바닐라 ESM UI |
-| `public/vendor/` | 핀 고정한 브라우저 라이브러리 (marked.js, gridstack, drawio viewer, shj) |
+| `public/vendor/` | 핀 고정한 브라우저 라이브러리 (marked.js, gridstack, drawio viewer, shj)와 에이전트 로고 |
 
 ### Key design decisions
 
@@ -111,6 +111,14 @@ bun bin/output-mesh.mjs start|stop|restart|status|uninstall
 
 - **라이브러리**(기본) — 문서·이미지·산출물만. 코드를 빼서 100개. `final` 을 먼저 보여준다. 종류를 직접 고르면 그 선택이 이긴다.
 - **활동** — 전부를 세션 타임라인으로. 단위가 파일이 아니라 작업이라 `(collector, session_ref)` 로 묶고 최신순으로 세운다. 감시용이라 검색을 쓰지 않는다.
+
+**에이전트는 로고로 말한다.** 탐색기의 폴더 줄마다 그 안의 파일을 만든 에이전트의 로고를 이름 바로 옆에 단다(최대 4개, 넘치면 묶음 제목에 이름으로). 로고는 `@lobehub/icons-static-svg`(1.95.1, MIT, `public/vendor/agent-logos/`)의 단색 SVG 를 CSS `mask` 로 칠해 글자색을 따른다. 컬러 로고는 `PRODUCT.md` 의 "조용함"과 어긋나고 라이트·다크를 따로 맞춰야 한다.
+
+- **에이전트 묶기는 계열 → 공급자 → 위치다.** Claude Code 와 Claude Desktop 은 Claude 아래 두 갈래다. 공급자가 하나뿐인 계열(Codex, Cursor)은 가운데 단을 접는다. 두 갈래에 모두 있는 파일은 계열 개수에서 한 번만 센다.
+- **에이전트로 묶은 트리에는 폴더 로고를 그리지 않는다.** 갈래가 이미 그 말을 한다. 줄 자신의 로고와 같은 로고도 되풀이하지 않는다(저장소 보기의 Claude Desktop 묶음).
+- **화면 읽기에는 묶음이 이름을 한 번 말한다.** 폴더 줄의 로고 묶음은 `role="img"` 에 에이전트 이름을 쉼표로 이은 `aria-label` 하나를 달고, 안쪽 로고는 숨긴다. 로고마다 이름을 달면 폴더 줄 이름이 로고 수만큼 길어진다.
+- **공식 로고가 없는 공급자는 색 점이다**(ai-mesh, Aside). 작업공간·가져오기 출처는 공급자가 없어서 로고도 없다.
+- **Gemini 는 공급자 이름 `gemini` 로 미리 대응해 둔다.** 수집기가 그 이름을 쓰면 바로 Gemini 계열과 로고로 묶인다. 다른 이름을 쓰면 `FAMILY_OF_PROVIDER` · `LOGO_OF_PROVIDER` 를 함께 고친다.
 
 **코드 판정은 확장자만으로 부족하다.** `.tape`·`.pbxproj` 같은 스크립트와 `Makefile`·`.zshrc` 처럼 확장자가 없는 설정이 문서로 새면 산출물이 묻힌다. `kindOf(ext, fileName)` 이 파일명까지 본다 — 점으로 시작하면 설정, 확장자가 없으면 문서가 아니다.
 
