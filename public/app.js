@@ -186,16 +186,18 @@ const collectorLabel = (collector) => COLLECTOR_NAME[collector] ?? tOr(`collecto
 const stateLabel = (value) => tOr(`state.${value}`, value);
 const kindLabel = (value) => tOr(`kind.${value ?? 'unclassified'}`, value);
 // 활동 카드는 수집기 이름을 단다. Aside 가 실어 온 Claude 세션에 Claude 색을 칠하면 수집기를 잘못 말한다.
-const PROVIDER_OF_COLLECTOR = { codex: 'openai-codex', 'claude-code': 'claude-code', cursor: 'cursor', 'claude-app': 'claude-app', gemini: 'gemini' };
+const PROVIDER_OF_COLLECTOR = { codex: 'openai-codex', 'claude-code': 'claude-code', cursor: 'cursor', 'claude-app': 'claude-app', gemini: 'gemini', aside: 'aside' };
 const subtitleSource = (source) => tOr(`subtitle.${source}`, '');
 // 같은 회사의 여러 제품(Claude Code, Claude Desktop)을 에이전트 묶기에서 한 계열로 모은다. 계열이 없는 공급자는
 // 자기 이름으로 남는다.
 const FAMILY_OF_PROVIDER = { 'claude-code': 'claude', 'claude-app': 'claude', 'openai-codex': 'codex', cursor: 'cursor', gemini: 'gemini' };
 const FAMILY_LABEL = { claude: 'Claude', codex: 'Codex', gemini: 'Gemini', cursor: 'Cursor' };
-// public/vendor/agent-logos 의 파일 이름. 공식 로고가 없는 공급자(ai-mesh, Aside)는 지금처럼 색 점이다.
-const LOGO_OF_PROVIDER = { 'claude-code': 'claudecode', 'claude-app': 'claude', 'openai-codex': 'codex', cursor: 'cursor', gemini: 'gemini' };
+// public/vendor/agent-logos 의 파일 이름. 로고가 없는 공급자(ai-mesh)는 지금처럼 색 점이다.
+const LOGO_OF_PROVIDER = { 'claude-code': 'claudecode', 'claude-app': 'claude', 'openai-codex': 'codex', cursor: 'cursor', gemini: 'gemini', aside: 'aside' };
 const LOGO_OF_FAMILY = { claude: 'claude', codex: 'codex', gemini: 'gemini', cursor: 'cursor' };
 const MAX_FOLDER_AGENTS = 4;
+/** 묶음 줄 앞의 표시. 로고가 있으면 로고, 없으면 지금처럼 색 점이다. */
+const markOf = (provider) => (LOGO_OF_PROVIDER[provider] ? { logo: LOGO_OF_PROVIDER[provider] } : { dot: provider });
 const FILTER_PANEL_GAP = 4;
 // 아이콘처럼 장식이다. 이름은 옆의 글자나 묶음의 aria-label 이 말한다 — 로고에도 달면 같은 이름을 두 번 읽는다.
 const logo = (name) => el('span', { className: 'logo', attrs: { 'data-logo': name, 'aria-hidden': 'true' } });
@@ -480,12 +482,12 @@ function filterDisplay(key, value) {
 }
 
 /**
- * 에이전트·앱 이름 앞의 표시. 공식 로고가 없는 에이전트(ai-mesh, Aside)는 색 점이다. 저장소 감시·가져오기는
+ * 에이전트·앱 이름 앞의 표시. 로고가 없는 에이전트(ai-mesh)는 색 점이다. 저장소 감시·가져오기는
  * 에이전트 활동이 아니라서 아무것도 달지 않는다 — 점은 "에이전트"로 읽힌다.
  */
 function agentMark(key, value) {
   if (key !== 'provider' && key !== 'collector') return null;
-  const provider = key === 'provider' ? value : PROVIDER_OF_COLLECTOR[value] ?? (value === 'aside' ? 'aside' : null);
+  const provider = key === 'provider' ? value : PROVIDER_OF_COLLECTOR[value];
   if (!provider) return null;
   return LOGO_OF_PROVIDER[provider]
     ? logo(LOGO_OF_PROVIDER[provider])
@@ -783,12 +785,12 @@ function firstLevel(row) {
           const family = FAMILY_OF_PROVIDER[p];
           return family
             ? { key: `family:${family}`, label: FAMILY_LABEL[family], logo: LOGO_OF_FAMILY[family], provider: p }
-            : { key: p, label: PROVIDER_LABEL[p] ?? p, dot: p };
+            : { key: p, label: PROVIDER_LABEL[p] ?? p, ...markOf(p) };
         })
         : [{ key: 'unknown', label: t('agent.unknown'), icon: 'session' }];
     case 'collector':
       return (row.collectors?.length ? row.collectors : [row.collector]).map((c) =>
-        ({ key: c, label: collectorLabel(c), dot: PROVIDER_OF_COLLECTOR[c] ?? c }));
+        ({ key: c, label: collectorLabel(c), ...markOf(PROVIDER_OF_COLLECTOR[c] ?? c) }));
     case 'date':
       return [{ ...dateBucket(touchedAt(row)), icon: 'date' }];
     default:

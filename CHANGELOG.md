@@ -15,6 +15,7 @@ lives in `package.json`; `output-mesh --version` and the explorer footer show it
 - **explorer:** open filters in a panel over the preview, so the tree stays in place. Selected filters stay as tokens next to the Filters button, and `f` opens the panel
 - **explorer:** pick several values in one filter group, for example Codex and Claude Code. Values in one group match any of them, and different groups must all match
 - **explorer:** show agent logos in the filter panel and on filter tokens
+- **explorer:** show the Aside logo for Aside sessions and the Aside app, and use logos on the first level of the app grouping
 
 ## [0.7.0] - 2026-10-01
 
