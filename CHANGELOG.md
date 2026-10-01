@@ -22,6 +22,14 @@ lives in `package.json`; `output-mesh --version` and the explorer footer show it
 - **ui:** rewrite Korean labels that read like literal translations, for example the change feed is now "최근 변경"
 - **ui:** align the Output Mesh title with the node chip and the view switch in the top bar
 - **ui:** clicking the top-bar collection error opens the errors and marks them as seen, so the bar returns to the live state until a newer error arrives
+- **cli:** the startup screen tells errors from this run apart from earlier ones in the last hour, and shows the time of the latest one
+- **collect:** a broken line in a Gemini transcript is reported once, not again after each restart
+- **ui:** the collection error list, the top bar, and `doctor` read errors directly, so warnings no longer push them out of view
+- **collect:** collection errors and warnings older than 30 days are deleted, like the change history
+- **ui:** the Collection status widget shows errors from the last hour only, like the top bar. Older errors stay in the error list
+- **cli:** `coverage` and `compact` print English, like the rest of the terminal output
+- **ui:** the English change feed is now "Recent changes" (was "Just happened")
+- **docs:** bring both READMEs up to date (service install, overview widgets, filters panel, several machines, collection errors, `compact`) and rewrite awkward phrasing
 - **collect:** collect Gemini Antigravity session artifacts and the files that its write tools changed. A broken transcript line is skipped with one warning that names the file and line
 
 ## [0.7.0] - 2026-10-01
