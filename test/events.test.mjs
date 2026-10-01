@@ -259,8 +259,10 @@ describe('워처와 변경 목록', () => {
     const path = join(dir, 'old.md');
     writeFileSync(path, 'x');
     await ingestFile(store, path, codex);
+    store.logIngest({ level: 'error', code: 'sweep_failed', message: '지난 일' });
     store.pruneEvents(Math.floor(Date.now() / 1000) + 1);
     expect(events()).toEqual([]);
+    expect(store.recentIngestErrors()).toEqual([]);
   });
 });
 
