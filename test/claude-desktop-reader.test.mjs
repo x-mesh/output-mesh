@@ -73,6 +73,17 @@ describe('Claude Desktop local cache reader', () => {
     expect((await reader.sweep(store)).unchanged).toBe(1);
   });
 
+  test('ingests into a fresh catalog when the local copy already exists', async () => {
+    const cache = join(dir, 'Cache_Data'); const output = join(dir, 'managed'); mkdirSync(cache);
+    writeFileSync(join(cache, 'frame'), embeddedGzipCache('https://' + UUID + '.frame.claudeusercontent.com/_f/5/', encoder.encode('<!doctype html><html><body>kept</body></html>')));
+    expect((await new ClaudeDesktopReader({ cacheDataRoot: cache, outputDir: output }).sweep(store)).inserted).toBe(1);
+    const fresh = new CatalogStore(join(dir, 'fresh.db'));
+    try {
+      expect((await new ClaudeDesktopReader({ cacheDataRoot: cache, outputDir: output }).sweep(fresh)).inserted).toBe(1);
+      expect(fresh.db.query('SELECT session_ref FROM artifact_origins').all()).toEqual([{ session_ref: UUID }]);
+    } finally { fresh.close(); }
+  });
+
   test('collects a complete frame without metadata and keeps URL fields out of provenance', async () => {
     const cache = join(dir, 'Cache_Data'); const output = join(dir, 'managed'); mkdirSync(cache);
     writeFileSync(join(cache, 'frame'), embeddedGzipCache('https://' + UUID + '.frame.claudeusercontent.com/_f/12/?token=secret', encoder.encode('<!doctype html><html><title>Frame title</title><body>safe</body></html>')));
