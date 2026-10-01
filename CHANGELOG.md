@@ -8,6 +8,10 @@ lives in `package.json`; `output-mesh --version` and the explorer footer show it
 
 ## [Unreleased]
 
+### Added
+
+- **cli:** the startup screen shows an `Update` line when npm has a newer version. It makes one request to the npm registry and sends no data about you. Set `OUTPUT_MESH_NO_UPDATE_CHECK=1` to turn it off
+
 ## [0.8.0] - 2026-10-01
 
 ### Added
