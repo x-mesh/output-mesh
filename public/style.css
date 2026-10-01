@@ -180,7 +180,8 @@ kbd {
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
 }
-.topbar h1 { margin: 0; }
+/* h1 의 기본 글자 크기(2em)가 줄 높이를 39px 로 키워, 안의 버튼이 그 줄의 기준선에 붙어 옆 칩보다 5px 아래로 처졌다. */
+.topbar h1 { margin: 0; display: flex; font-size: inherit; }
 .brand {
   min-height: 28px; padding: 0 var(--space-2); margin-left: calc(-1 * var(--space-2));
   border-color: transparent; background: transparent;
