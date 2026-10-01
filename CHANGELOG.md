@@ -19,6 +19,8 @@ lives in `package.json`; `output-mesh --version` and the explorer footer show it
 - **overview:** draw the widget resize handle as a diagonal corner grip, so it reads as two-way resizing and stands out
 - **overview:** switch the activity widget between chart and table in place. The table fills the chart's area, keeps its header row in view, and the choice is remembered
 - **overview:** draw wider activity bars with narrower gaps, so sparse weeks no longer look empty
+- **ui:** rewrite Korean labels that read like literal translations, for example the change feed is now "최근 변경"
+- **ui:** align the Output Mesh title with the node chip and the view switch in the top bar
 - **ui:** clicking the top-bar collection error opens the errors and marks them as seen, so the bar returns to the live state until a newer error arrives
 - **collect:** collect Gemini Antigravity session artifacts and the files that its write tools changed. A broken transcript line is skipped with one warning that names the file and line
 
