@@ -30,6 +30,7 @@ lives in `package.json`; `output-mesh --version` and the explorer footer show it
 - **cli:** `coverage` and `compact` print English, like the rest of the terminal output
 - **ui:** the English change feed is now "Recent changes" (was "Just happened")
 - **docs:** bring both READMEs up to date (service install, overview widgets, filters panel, several machines, collection errors, `compact`) and rewrite awkward phrasing
+- **overview:** a Temporary images widget, on by default, shows the scratch-folder images grouped by session as small previews. In the Activity view, each session shows these images apart from its other files, with a "temporary" mark
 - **collect:** show images from Claude Code session scratch folders, for example screenshots that an agent took with a script. They carry a "temporary" mark, are not copied, and leave the library when the folder is deleted. The change feed shows one line per set of images from a session
 - **collect:** watch the git worktrees of each repository that an agent worked in, so documents edited there with shell commands are collected. The first scan of a worktree skips the files that its checkout wrote
 - **collect:** collect Gemini Antigravity session artifacts and the files that its write tools changed. A broken transcript line is skipped with one warning that names the file and line
