@@ -82,7 +82,7 @@ A git worktree counts as its main repository. The tree shows each worktree as a 
 
 ## Using it
 
-**Explorer (left).** Search, a period (all, today, 7, 30, 90 days), collapsible filters, and a tree. Group the tree by repository, agent, app, date, or kind. Each folder shows the logos of the agents that made its files. The agent grouping puts each product under its vendor, for example Claude Code and Claude Desktop under Claude. Every file shows a subtitle: the document's own title, or the task that created it when the title says nothing ("README", "Product").
+**Explorer (left).** Search, a period (all, today, 7, 30, 90 days), a Filters button, and a tree. The Filters button opens a panel over the preview, so the tree stays in place. Selected filters stay as tokens next to the button, and `×` removes one. Group the tree by repository, agent, app, date, or kind. Each folder shows the logos of the agents that made its files. The agent grouping puts each product under its vendor, for example Claude Code and Claude Desktop under Claude. Every file shows a subtitle: the document's own title, or the task that created it when the title says nothing ("README", "Product").
 
 If you type a search term, the tree becomes a flat list in relevance order. Each result shows its location and the text that matched. If you open a result, the preview marks each match and scrolls to the first match.
 
@@ -94,7 +94,7 @@ If you type a search term, the tree becomes a flat list in relevance order. Each
 
 If a collection error occurs, the top bar shows "Collection error" for one hour. Click it to see the recent errors.
 
-Keyboard: `↑` `↓` move and open, `←` `→` collapse and expand, `/` search. Click the title to return to the overview; the browser back button works too.
+Keyboard: `↑` `↓` move and open, `←` `→` collapse and expand, `/` search, `f` filters. Click the title to return to the overview; the browser back button works too.
 
 ## Commands
 
