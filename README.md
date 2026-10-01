@@ -58,7 +58,7 @@ bun bin/output-mesh.mjs
 | Aside | `~/.aside/u/<account>/sessions/<date>_<id>/artifacts/` | Watches the folder, enriches from Aside's `state.db` (opened read-only) |
 | Codex | `~/.codex/sessions/**/rollout-*.jsonl` | Paths from `apply_patch` markers in session logs |
 | Claude Code | `~/.claude/projects/**/*.jsonl` | `file_path` of `Write` / `Edit` tool calls |
-| Claude Desktop | `~/Library/Application Support/Claude/Cache/Cache_Data/` | Reads cached metadata and complete artifact HTML locally |
+| Claude Desktop | `~/Library/Application Support/Claude/Cache/Cache_Data/` | Artifact HTML, files that chats wrote, and chat widgets from the local cache |
 | Cursor | `~/Library/Application Support/Cursor/.../state.vscdb` | Files a composer edited or created (opened read-only) |
 | Your repositories | Repositories any of the above worked in | Documents changed in the last 7 days, then a folder watch for new or edited ones |
 | Anything else | A folder or file you choose | `output-mesh import <path>` |
@@ -67,7 +67,13 @@ Codex and Claude Code do not keep artifacts anywhere special. Their logs record 
 
 The library shows documents, web pages, images, spreadsheets, and bundles. output-mesh also collects source code, agent notes, and unknown formats, but the library hides them. Agent notes are the memory files that Claude Code keeps in `~/.claude/projects/*/memory/`. If you need a hidden kind, select it in the Kind filter. The "Just happened" feed hides the same kinds and shows the hidden count.
 
-Claude Desktop collection reads the local Chromium HTTP cache only. It never calls private Claude APIs or sync WebSockets. An artifact appears after Claude Desktop caches its metadata and complete frame body. Cache eviction leaves the last collected local copy, and private cache format changes can pause this source.
+Claude Desktop collection reads the local Chromium HTTP cache only. It never calls private Claude APIs or sync WebSockets. It collects three things:
+
+- Artifact HTML that Claude Desktop rendered.
+- Files that a chat wrote to `/mnt/user-data/outputs/`. A downloaded file keeps its exact bytes. A file rebuilt from the conversation does not include edits from shell commands.
+- Chat widgets, saved as HTML pages.
+
+The cache holds only the conversations that you opened in Claude Desktop. Cache eviction leaves the last collected local copy. If the private cache format changes, this source can stop.
 
 A git worktree counts as its main repository. The tree shows each worktree as a `⑂ name` group below that repository. output-mesh does not collect the temporary session folder of Claude Code (`/private/tmp/claude-*/`).
 

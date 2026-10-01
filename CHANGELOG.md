@@ -11,6 +11,7 @@ lives in `package.json`; `output-mesh --version` and the explorer footer show it
 ### Added
 
 - **collect:** read Claude Desktop artifacts from its local HTTP cache. output-mesh keeps a local copy of each complete artifact HTML and never calls Claude APIs
+- **collect:** collect files that Claude Desktop chats wrote, downloaded chat files, and chat widgets from the cached conversations
 
 ## [0.6.0] - 2026-09-21
 
