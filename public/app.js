@@ -449,6 +449,7 @@ function setModeState(mode) {
   $('q').disabled = mode === 'activity';
   $('q').placeholder = t(mode === 'activity' ? 'search.disabled' : 'search.placeholder');
   $('thumb-size').hidden = mode !== 'activity';
+  $('follow-toggle').hidden = mode !== 'activity';
   renderTemporaryToggle();
   updateWide();
 }
@@ -2662,6 +2663,25 @@ function scratchStrip(session) {
 // 활동 보기를 다시 그리기 전에 본 것. 무엇이 새로 들어왔는지는 이것과 견준다. 범위(필터 · 기간)가 바뀌면 처음부터.
 let activitySeen = null;
 let thumbSize = THUMB_SIZES.includes(prefs.read('activity.thumbs', 'small')) ? prefs.read('activity.thumbs', 'small') : 'small';
+// 따라가기: 새 작업이 오면 내려 보고 있어도 맨 위로 간다. 기본은 끔 — 읽던 카드가 갑자기 사라진다.
+let followNew = prefs.read('activity.follow', false) === true;
+
+function renderFollowToggle() {
+  const button = $('follow-toggle');
+  button.textContent = t('activity.follow');
+  button.title = t(followNew ? 'activity.followOnTitle' : 'activity.followOffTitle');
+  button.setAttribute('aria-pressed', String(followNew));
+}
+$('follow-toggle').addEventListener('click', () => {
+  followNew = !followNew;
+  prefs.write('activity.follow', followNew);
+  renderFollowToggle();
+  // 켜는 순간이 곧 "지금 맨 위를 보겠다"는 뜻이다. 떠 있던 새 작업 알림도 걷는다.
+  if (followNew) {
+    $('rows').scrollTo({ top: 0 });
+    $('rows').querySelector('.activity-new')?.remove();
+  }
+});
 const sessionKey = (session) => `${session.collector}\u0000${session.session_ref}`;
 
 /** 활동 카드의 그림 크기. 크게 고르면 무엇을 찍은 화면인지 알아볼 만큼 키운다. */
@@ -2691,8 +2711,8 @@ async function refreshActivity({ live = false } = {}) {
   const list = $('rows');
   const scope = params.toString();
   const before = live && activitySeen?.scope === scope ? activitySeen : null;
-  const following = list.scrollTop > ACTIVITY_FOLLOW_PX;
-  const anchor = following ? [...list.querySelectorAll('.session')].find((card) => card.getBoundingClientRect().bottom > list.getBoundingClientRect().top) : null;
+  const scrolled = list.scrollTop > ACTIVITY_FOLLOW_PX;
+  const anchor = scrolled ? [...list.querySelectorAll('.session')].find((card) => card.getBoundingClientRect().bottom > list.getBoundingClientRect().top) : null;
   const anchorKey = anchor?.dataset.key;
   const anchorOffset = anchor ? anchor.getBoundingClientRect().top - list.getBoundingClientRect().top : 0;
 
@@ -2706,6 +2726,7 @@ async function refreshActivity({ live = false } = {}) {
   $('collapse-all').hidden = true;
   $('group-by').parentElement.hidden = true;
   renderThumbSize();
+  renderFollowToggle();
 
   if (sessions.length === 0) list.append(el('li', { className: 'empty' }, el('p', {}, t('activity.empty'))));
   const fresh = [];
@@ -2729,9 +2750,12 @@ async function refreshActivity({ live = false } = {}) {
   };
   if (fresh.length || before) setTimeout(() => list.querySelectorAll('.fresh').forEach((node) => node.classList.remove('fresh')), ACTIVITY_FRESH_MS);
 
-  // 보던 카드를 제자리에 둔다. 그 위로 새로 들어온 카드 수를 알리고, 누르면 맨 위로 간다.
+  // 따라가기를 켰으면 새 작업이 올 때 맨 위로 간다. 아니면 보던 카드를 제자리에 두고, 그 위로 새로 들어온
+  // 카드 수를 알린다(누르면 맨 위로). 새 작업이 없으면 어느 쪽이든 보던 자리를 지킨다.
   const kept = anchorKey ? [...list.querySelectorAll('.session')].find((card) => card.dataset.key === anchorKey) : null;
-  if (kept) {
+  if (followNew && fresh.length > 0) {
+    list.scrollTop = 0;
+  } else if (kept) {
     list.scrollTop += kept.getBoundingClientRect().top - list.getBoundingClientRect().top - anchorOffset;
     const above = fresh.filter((card) => card.compareDocumentPosition(kept) & Node.DOCUMENT_POSITION_FOLLOWING).length;
     if (above > 0) {
