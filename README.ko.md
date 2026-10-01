@@ -70,7 +70,7 @@ output-mesh install
 | 출처 | 위치 | 방법 |
 |---|---|---|
 | Aside | `~/.aside/u/<계정>/sessions/<날짜>_<id>/artifacts/` | 폴더를 감시하고, Aside의 `state.db`를 읽기 전용으로 열어 정보를 보탠다 |
-| Codex | `~/.codex/sessions/**/rollout-*.jsonl` | 세션 로그의 `apply_patch` 표시에 적힌 경로 |
+| Codex | `~/.codex/sessions/**/rollout-*.jsonl`, `~/.codex/generated_images/` | 세션 로그의 `apply_patch` 표시에 적힌 경로, Codex 이미지 생성 도구가 만든 그림 |
 | Claude Code | `~/.claude/projects/**/*.jsonl`, `/private/tmp/claude-<uid>/` 의 세션 작업 폴더 | `Write`, `Edit` 도구 호출의 `file_path`, 작업 폴더의 이미지 |
 | Claude Desktop | `~/Library/Application Support/Claude/Cache/Cache_Data/` | 로컬 캐시에 남은 아티팩트 HTML, 채팅이 쓴 파일, 채팅 위젯 |
 | Gemini Antigravity | `~/.gemini/{antigravity,antigravity-cli,antigravity-ide}/brain/` | 로컬 세션 산출물과 쓰기 도구가 기록한 파일 경로 |
@@ -94,7 +94,7 @@ Gemini 수집은 Antigravity, Antigravity CLI, Antigravity IDE의 로컬 데이�
 
 Antigravity 대화 기록에는 JSON이 아닌 줄이 가끔 섞여 있다. output-mesh는 그 줄만 건너뛰고 줄마다 경고를 한 번 남긴다. 경고는 수집 오류가 아니다.
 
-git worktree는 본 저장소의 일부로 센다. 트리에서는 그 저장소 아래에 `⑂ 이름` 묶음으로 나온다. 에이전트가 일한 저장소라면 그 저장소의 worktree도 모두 감시한다. worktree를 처음 읽을 때는 만든 뒤에 바뀐 문서만 모은다. 나머지는 체크아웃으로 생긴 사본이기 때문이다. Claude Code의 세션 임시 폴더(`/private/tmp/claude-*/`)에서는 이미지만 모은다. 에이전트가 스크립트로 찍은 스크린샷 같은 것이다. 나머지 파일은 작업 메모와 로그라 모으지 않는다. 이 이미지는 위치 옆에 "임시" 표시가 붙고, 복사하지 않는다. Claude Code가 폴더를 정리하거나 재부팅으로 지워지면 라이브러리에서도 빠진다. "최근 변경"에는 한 세션의 이미지를 한 줄로 묶어 보여 준다. 이 이미지는 기본으로 숨긴다. 목록과 피드에서 보려면 필터 줄 끝의 **임시 이미지** 스위치를 누른다. 스위치와 개요 머리 줄에 숨긴 개수가 나오고, 어느 쪽을 눌러도 켜진다. 활동 보기에는 늘 보인다.
+git worktree는 본 저장소의 일부로 센다. 트리에서는 그 저장소 아래에 `⑂ 이름` 묶음으로 나온다. 에이전트가 일한 저장소라면 그 저장소의 worktree도 모두 감시한다. worktree를 처음 읽을 때는 만든 뒤에 바뀐 문서만 모은다. 나머지는 체크아웃으로 생긴 사본이기 때문이다. Claude Code의 세션 임시 폴더(`/private/tmp/claude-*/`)에서는 이미지만 모은다. 에이전트가 스크립트로 찍은 스크린샷 같은 것이다. 나머지 파일은 작업 메모와 로그라 모으지 않는다. 이 이미지는 위치 옆에 "임시" 표시가 붙고, 복사하지 않는다. Claude Code가 폴더를 정리하거나 재부팅으로 지워지면 라이브러리에서도 빠진다. "최근 변경"에는 한 세션의 이미지를 한 줄로 묶어 보여 준다. Codex 이미지 생성 도구가 만든 그림(`~/.codex/generated_images/`)도 같이 다룬다. 다만 Codex가 지우지 않는 자리라 "임시" 대신 "생성" 표시가 붙는다. 이 이미지는 기본으로 숨긴다. 목록과 피드에서 보려면 필터 줄 끝의 **임시 이미지** 스위치를 누른다. 스위치와 개요 머리 줄에 숨긴 개수가 나오고, 어느 쪽을 눌러도 켜진다. 활동 보기에는 늘 보인다.
 
 ## 쓰는 법
 

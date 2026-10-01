@@ -2,8 +2,8 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { scratchImages } from '../lib/scratch-images.mjs';
-import { ingestFile, sweepScratchImages } from '../lib/collector.mjs';
+import { generatedImages, scratchImages } from '../lib/scratch-images.mjs';
+import { ingestFile, sweepGeneratedImages, sweepScratchImages } from '../lib/collector.mjs';
 import { CatalogStore } from '../lib/store.mjs';
 import { locationOf } from '../lib/describe.mjs';
 import { activity, facets, overview, recentChanges, search } from '../lib/search.mjs';
@@ -123,5 +123,35 @@ describe('임시 파일 토글', () => {
     } finally {
       rmSync(tmp, { recursive: true, force: true });
     }
+  });
+});
+
+describe('Codex 생성 그림', () => {
+  const THREAD = '019feddb-6ee2-7412-bb22-ef4ccf062c1f';
+  const generatedRoot = () => join(root, 'home', '.codex', 'generated_images');
+
+  test('스레드 폴더 바로 아래의 그림만 고르고, 그 Codex 세션의 출처로 붙는다', async () => {
+    const image = write(join(generatedRoot(), THREAD, 'exec-1.png'));
+    write(join(generatedRoot(), THREAD, 'notes.txt'), 'x');
+    write(join(generatedRoot(), THREAD, 'nested', 'deep.png'));
+    write(join(generatedRoot(), 'not-a-thread', 'x.png'));
+    expect(generatedImages(generatedRoot()).map((found) => [found.path, found.sessionRef])).toEqual([[image, THREAD]]);
+
+    const workspace = join(root, 'ai-mesh');
+    await ingestFile(store, write(join(workspace, 'a.md'), '# a'), { collector: 'codex', provider: 'openai-codex', sessionRef: THREAD, workspace, sessionTitle: '턴이 끊긴다' });
+    expect(await sweepGeneratedImages(store, generatedRoot())).toMatchObject({ found: 1, inserted: 1 });
+    expect(store.originsOf(store.byPathKey(image).id).map((o) => [o.collector, o.provider, o.session_ref, o.workspace, o.session_title]))
+      .toEqual([['codex', 'openai-codex', THREAD, workspace, '턴이 끊긴다']]);
+  });
+
+  test('임시 이미지와 같이 기본으로 숨기고, 위치에는 생성 그림이라고 적는다', async () => {
+    const image = write(join(generatedRoot(), THREAD, 'exec-1.png'));
+    await sweepGeneratedImages(store, generatedRoot());
+    const names = (filters) => search(store, '', { view: 'library', ...filters }).map((row) => row.file_name);
+    expect(names({})).toEqual([]);
+    expect(names({ temporary: true })).toEqual(['exec-1.png']);
+    expect(locationOf(`/Users/me/.codex/generated_images/${THREAD}/exec-1.png`, ['/Users/me/ai-mesh'], '/Users/me'))
+      .toEqual({ repo: 'ai-mesh', dir: '/', scratch: THREAD, generated: true });
+    expect(image.endsWith('exec-1.png')).toBe(true);
   });
 });
