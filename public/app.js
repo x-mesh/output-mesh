@@ -89,6 +89,8 @@ const openState = prefs.read('tree.open', {});
 const facetOpen = prefs.read('facets.open', { kind: true });
 let inspectorOpen = prefs.read('inspector.open', true);
 let groupBy = GROUPINGS.includes(prefs.read('tree.groupBy', 'repo')) ? prefs.read('tree.groupBy', 'repo') : 'repo';
+const CHART_VIEWS = ['chart', 'table'];
+let chartView = CHART_VIEWS.includes(prefs.read('home.chartView', 'chart')) ? prefs.read('home.chartView', 'chart') : 'chart';
 
 const api = async (path, options) => {
   const res = await fetch(path, options);
@@ -1753,7 +1755,8 @@ const DIST_ROWS = 8;
 const AGENT_ORDER = ['openai-codex', 'claude-code', 'ai-mesh', 'cursor', 'gemini', 'claude-app', 'unknown'];
 const agentName = (provider) => (provider === 'unknown' ? t('agent.unknown') : PROVIDER_LABEL[provider] ?? provider);
 const TOOLTIP_OFFSET = 8;
-const CHART = { plot: 160, top: 10, axis: 22, left: 34, right: 6, maxBar: 18, gap: 2, radius: 4, tickCount: 4 };
+// 막대는 칸의 대부분을 쓴다. 상한 18px · 칸의 62% 였을 때는 주 단위 22칸에서 막대보다 빈 간격이 넓어 데이터가 없는 것처럼 보였다.
+const CHART = { plot: 160, top: 10, axis: 22, left: 34, right: 6, maxBar: 48, fill: 0.78, gap: 2, radius: 4, tickCount: 4 };
 let homeToken = 0;
 
 function homeItem(row) {
@@ -2168,10 +2171,10 @@ function activityPanel(activity) {
     }
   }).observe(chart);
 
-  // 툴팁은 보조다. 같은 숫자를 표로도 읽을 수 있어야 한다.
+  // 툴팁은 보조다. 같은 숫자를 표로도 읽을 수 있어야 한다(색만으로는 가르기 어려운 사람에게도).
+  // 표는 그래프와 같은 자리를 나눠 쓴다. 그래프 아래에 펼치던 때는 위젯 높이 밖으로 밀려 위젯 안에서 스크롤해야 보였다.
   const stackOf = (b) => agents.reduce((s, p) => s + (b.counts[p] ?? 0), 0);
-  const table = el('details', { className: 'table-view' },
-    el('summary', {}, t('chart.table')),
+  const table = el('div', { className: 'table-view', tabIndex: 0, attrs: { role: 'region', 'aria-label': t('chart.viewTable') } },
     el('table', {},
       el('thead', {}, el('tr', {}, el('th', {}, t(`unit.${activity.unit}`)), ...agents.map((p) => el('th', {}, agentName(p))), el('th', {}, t('chart.total')))),
       el('tbody', {}, ...[...activity.buckets].reverse().filter((b) => stackOf(b) > 0).map((b) =>
@@ -2179,6 +2182,22 @@ function activityPanel(activity) {
           ...agents.map((p) => el('td', {}, b.counts[p] ?? 0)),
           el('td', {}, stackOf(b)))))));
 
+  const views = el('div', { className: 'segmented', attrs: { role: 'radiogroup', 'aria-label': t('chart.view') } });
+  const showView = (view) => {
+    chart.hidden = view !== 'chart';
+    table.hidden = view !== 'table';
+    views.replaceChildren(...CHART_VIEWS.map((value) => el('button', {
+      type: 'button',
+      attrs: { role: 'radio', 'aria-checked': String(view === value) },
+      onclick: () => {
+        chartView = value;
+        prefs.write('home.chartView', value);
+        showView(value);
+      },
+    }, t(value === 'chart' ? 'chart.viewChart' : 'chart.viewTable'))));
+  };
+  showView(chartView);
+  head.append(views);
   return el('section', { className: 'panel' }, head, chart, table);
 }
 
@@ -2197,14 +2216,14 @@ function roundedTop(x, y, w, h, r) {
 function drawActivity(chart, activity, agents, title) {
   const width = chart.clientWidth;
   if (!width) return;
-  const { plot, top, axis, left, right, maxBar, gap, radius, tickCount } = CHART;
+  const { plot, top, axis, left, right, maxBar, fill, gap, radius, tickCount } = CHART;
   const { buckets, unit } = activity;
   const stackOf = (b) => agents.reduce((s, p) => s + (b.counts[p] ?? 0), 0);
   const peak = Math.max(...buckets.map(stackOf));
   const step = niceStep(peak, tickCount);
   const max = Math.max(step, Math.ceil(peak / step) * step);
   const slot = (width - left - right) / buckets.length;
-  const barWidth = Math.max(2, Math.min(maxBar, slot * 0.62));
+  const barWidth = Math.max(2, Math.min(maxBar, slot * fill));
   const baseline = top + plot;
   const yOf = (value) => baseline - (value / max) * plot;
 
