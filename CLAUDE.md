@@ -77,7 +77,7 @@ bun bin/output-mesh.mjs start|stop|restart|status|uninstall
 - **사본을 둔다.** 캐시 항목은 참조할 수 있는 파일이 아니고, 캐시는 언제든 밀려난다. UUID 마다 가장 새 버전을 `AgentOutputCatalog/claude-app-artifacts/<uuid>.html` 로 옮겨 적고 그 파일을 색인한다. "아티팩트 파일을 복사하지 않는다"의 유일한 예외다.
 - **건너뛰는 기준은 카탈로그다.** 사본은 카탈로그를 다시 만들어도 남는다. 사본이 같다는 것만으로 건너뛰면 새 카탈로그가 그 아티팩트를 영영 받지 못한다. 카탈로그가 그 버전을 받았고(`claude.version.<uuid>`) 사본도 같을 때만 건너뛴다.
 - **세션 로그와 같은 조건으로 돈다.** 실제 홈의 캐시(실측 18,046개, 837MB)를 훑고 카탈로그 폴더에 쓰기 때문이다. 조건이 없을 때는 `withSessionLogs` 를 끈 워처 테스트가 실제 폴더에 사본을 남겼다.
-- **색은 Claude 색이다.** 다섯째 색을 들이지 않는 이유는 Cursor 와 같다. Claude Code 와 색이 겹치므로 `AGENT_ORDER` 에서 둘을 붙여 두지 않는다.
+- **색은 Claude 색이다.** 다섯째 색을 들이지 않는 이유는 Cursor 와 같다. Claude Code 와 색이 겹치므로 `AGENT_ORDER` 에서 둘 사이에 다른 에이전트를 둔다. 활동이 둘뿐인 기간에는 그래도 붙어 보인다.
 
 **Codex·Claude Code 는 산출물이 아니라 출처를 준다.** 둘 다 산출물 레코드가 없지만 세션 로그에 쓴 경로가 남는다 — Codex 는 `apply_patch` 본문의 `*** Add/Update File:` 마커(1,236개 중 321개), Claude Code 는 `tool_use` 블록의 `file_path`. 그 경로의 파일은 이미 저장소 안에 있으므로 옮기지 않고 출처만 붙인다. Aside 가 주지 못하는 `workspace` 가 여기서 채워진다. 자동 발견분은 산출물 플래그가 없으므로 절대 `final` 로 올리지 않는다.
 
