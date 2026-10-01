@@ -718,7 +718,7 @@ embed.preview-fill { height: 100%; }
 .dash h3 { margin: 0 0 var(--space-3); font-size: var(--text-sm); font-weight: 600; color: var(--text); }
 .dash-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: var(--space-5) var(--space-6); }
 .dash { container-type: inline-size; }
-/* 방금 일어난 일을 넓게, 최종본을 좁게. 좁은 창에서는 위아래로 쌓는다. */
+/* 최근 변경을 넓게, 최종본을 좁게. 좁은 창에서는 위아래로 쌓는다. */
 .dash-lists { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-5) var(--space-6); align-items: start; }
 /* 위젯 격자. 자리와 크기만 gridstack 에 맡기고 카드 장식은 그리지 않는다 — PRODUCT.md 의
    안티레퍼런스는 "둥근 카드 격자"라는 생김새다. 쉴 때는 테두리도 그림자도 없다. */
