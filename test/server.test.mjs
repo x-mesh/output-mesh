@@ -112,6 +112,13 @@ describe('V7 — 경로 탈출', () => {
 });
 
 describe('API', () => {
+  test('같은 필터를 여러 번 보내면 어느 값이든 맞는 파일이 나온다', async () => {
+    const names = async (query) => (await (await get('/api/search?' + query)).json()).rows.map((r) => r.file_name);
+    const both = await names('ext=md&ext=html');
+    expect(both).toEqual(expect.arrayContaining(['note.md', 'sketch.html']));
+    expect(await names('ext=md')).not.toContain('sketch.html');
+  });
+
   test('검색이 한글 질의에 응답한다', async () => {
     const { rows } = await (await get('/api/search?q=' + encodeURIComponent('본문'))).json();
     expect(rows.map((r) => r.file_name)).toContain('note.md');
