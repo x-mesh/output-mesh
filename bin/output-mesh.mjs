@@ -10,7 +10,7 @@ import { importPath } from '../lib/importer.mjs';
 import { startServer } from '../lib/server.mjs';
 import { surveyCoverage, REASON_LABEL } from '../lib/coverage.mjs';
 import { CATALOG_DB, COMPACT_HINT_RATIO, DEFAULT_HOST, DEFAULT_PORT, INGEST_ERROR_VISIBLE_S, MEGABYTE } from '../lib/paths.mjs';
-import { collectProgressText, count, createSpinner } from '../lib/spinner.mjs';
+import { collectErrorsText, collectProgressText, count, createSpinner } from '../lib/spinner.mjs';
 import { NAME, VERSION } from '../lib/version.mjs';
 import { looksEphemeral, serviceCommand, servicePlan } from '../lib/service.mjs';
 import { acquireWriterLock, clearRun, readRun, releaseWriterLock, writeRun } from '../lib/running.mjs';
@@ -33,14 +33,14 @@ function flag(name, fallback) {
  * 시작 화면. 무엇이 모였고 무엇을 하면 되는지만 적는다 — 주소를 눈에 띄게 두는 것이 이 화면의
  * 일이다. 볼 것이 있을 때만 줄을 늘린다(빠진 수집기, 회수할 빈 자리, 지난 오류).
  */
-function startupLines(store, readers, port) {
+function startupLines(store, readers, port, collectStartedAt) {
   const counts = store.counts();
   const storage = store.storage();
   const sources = sourcesStatus(store, readers);
   const missing = sources.filter((source) => !source.available).map((source) => source.collector);
   // 지난 오류까지 붙들지 않는다. 화면이 쓰는 것과 같은 창(INGEST_ERROR_VISIBLE_S)으로 자른다.
   const since = Math.floor(Date.now() / 1000) - INGEST_ERROR_VISIBLE_S;
-  const errors = store.recentIngestEvents().filter((event) => event.level === 'error' && event.at >= since).length;
+  const errors = collectErrorsText(store.recentIngestErrors({ since }), collectStartedAt);
 
   const lines = [
     `${NAME} ${VERSION}`,
@@ -51,7 +51,7 @@ function startupLines(store, readers, port) {
   if (storage.freeRatio >= COMPACT_HINT_RATIO) {
     lines.push(`  Storage   ${mb(storage.freeBytes)} of ${mb(storage.bytes)} is reclaimable — run \`${NAME} compact\``);
   }
-  if (errors > 0) lines.push(`  Errors    ${count(errors)} collect errors in the last hour — run \`${NAME} doctor\``);
+  if (errors) lines.push(`  Errors    ${errors} — run \`${NAME} doctor\``);
   lines.push('', `  Open      http://${DEFAULT_HOST}:${port}`, '  Stop      Ctrl-C', '');
   return lines;
 }
@@ -199,11 +199,12 @@ switch (command) {
       spinner.note('First run: reading every agent log. This can take a few minutes.');
     }
     const started = performance.now();
+    const collectStartedAt = Math.floor(Date.now() / 1000);
     spinner.start('Preparing to collect');
     await watcher.start({ onProgress: (progress) => spinner.update(...collectProgressText(progress)) });
     const seconds = ((performance.now() - started) / 1000).toFixed(1);
     spinner.stop(`Collected in ${seconds}s`);
-    for (const line of startupLines(store, readers, port)) console.log(line);
+    for (const line of startupLines(store, readers, port, collectStartedAt)) console.log(line);
     break;
   }
 
@@ -243,13 +244,13 @@ switch (command) {
     for (const reader of readers) {
       const survey = surveyCoverage(reader.sessionsRoot);
       console.log(reader.sessionsRoot);
-      console.log(`  세션 ${survey.sessions.total}개 — 산출물 있음 ${survey.sessions.withArtifacts}, 비어 있음 ${survey.sessions.empty}`);
-      console.log(`  수집 ${survey.collected} / 제외 ${survey.excludedTotal}`);
+      console.log(`  ${count(survey.sessions.total)} sessions — ${count(survey.sessions.withArtifacts)} with artifacts, ${count(survey.sessions.empty)} empty`);
+      console.log(`  ${count(survey.collected)} collected · ${count(survey.excludedTotal)} excluded`);
       for (const [reason, n] of Object.entries(survey.excluded).sort((a, b) => b[1] - a[1])) {
         console.log(`    ${String(n).padStart(5)}  ${REASON_LABEL[reason] ?? reason}`);
       }
       for (const group of survey.largestGroups) {
-        console.log(`  제외된 최대 묶음: ${group.name} (${group.files}개)`);
+        console.log(`  largest excluded group: ${group.name} (${count(group.files)} files)`);
       }
     }
     break;
@@ -273,7 +274,7 @@ switch (command) {
       ftsIntegrity: store.ftsIntegrityOk(),
       counts: store.counts(),
       sources: sourcesStatus(store, readers),
-      recentErrors: store.recentIngestEvents(5),
+      recentErrors: store.recentIngestErrors({ limit: 5 }),
     });
     store.close();
     break;
@@ -284,7 +285,7 @@ switch (command) {
     const { before, after } = store.compact();
     const mb = (bytes) => `${(bytes / MEGABYTE).toFixed(1)}MB`;
     const seconds = ((Date.now() - started) / 1000).toFixed(1);
-    console.log(`${mb(before)} → ${mb(after)}  (${mb(before - after)} 회수 · ${seconds}초)`);
+    console.log(`${mb(before)} → ${mb(after)}  (${mb(before - after)} reclaimed in ${seconds}s)`);
     store.close();
     break;
   }
