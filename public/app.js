@@ -180,13 +180,13 @@ function icon(name, className = '') {
   return svg;
 }
 
-const PROVIDER_LABEL = { 'openai-codex': 'Codex', 'claude-code': 'Claude Code', 'ai-mesh': 'ai-mesh', aside: 'Aside', cursor: 'Cursor', 'claude-app': 'Claude Desktop' };
-const COLLECTOR_NAME = { codex: 'Codex', 'claude-code': 'Claude Code', aside: 'Aside', cursor: 'Cursor', 'claude-app': 'Claude Desktop' };
+const PROVIDER_LABEL = { 'openai-codex': 'Codex', 'claude-code': 'Claude Code', 'ai-mesh': 'ai-mesh', aside: 'Aside', cursor: 'Cursor', 'claude-app': 'Claude Desktop', gemini: 'Gemini' };
+const COLLECTOR_NAME = { codex: 'Codex', 'claude-code': 'Claude Code', aside: 'Aside', cursor: 'Cursor', 'claude-app': 'Claude Desktop', gemini: 'Gemini' };
 const collectorLabel = (collector) => COLLECTOR_NAME[collector] ?? tOr(`collector.${collector}`, t('collector.import'));
 const stateLabel = (value) => tOr(`state.${value}`, value);
 const kindLabel = (value) => tOr(`kind.${value ?? 'unclassified'}`, value);
 // 활동 카드는 수집기 이름을 단다. Aside 가 실어 온 Claude 세션에 Claude 색을 칠하면 수집기를 잘못 말한다.
-const PROVIDER_OF_COLLECTOR = { codex: 'openai-codex', 'claude-code': 'claude-code', cursor: 'cursor', 'claude-app': 'claude-app' };
+const PROVIDER_OF_COLLECTOR = { codex: 'openai-codex', 'claude-code': 'claude-code', cursor: 'cursor', 'claude-app': 'claude-app', gemini: 'gemini' };
 const subtitleSource = (source) => tOr(`subtitle.${source}`, '');
 // 같은 회사의 여러 제품(Claude Code, Claude Desktop)을 에이전트 묶기에서 한 계열로 모은다. 계열이 없는 공급자는
 // 자기 이름으로 남는다.
@@ -1707,7 +1707,7 @@ const kbd = (key) => el('kbd', {}, key);
 const DIST_ROWS = 8;
 // 색은 개체를 따른다. 필터로 에이전트가 줄어도 남은 에이전트의 색과 쌓는 순서가 그대로다.
 // 색은 개체를 따른다. Cursor 는 중립 회색이다 — 검증한 세 색에 넷째를 끼우면 적색맹 간격이 좁아진다.
-const AGENT_ORDER = ['openai-codex', 'claude-code', 'ai-mesh', 'cursor', 'claude-app', 'unknown'];
+const AGENT_ORDER = ['openai-codex', 'claude-code', 'ai-mesh', 'cursor', 'gemini', 'claude-app', 'unknown'];
 const agentName = (provider) => (provider === 'unknown' ? t('agent.unknown') : PROVIDER_LABEL[provider] ?? provider);
 const TOOLTIP_OFFSET = 8;
 const CHART = { plot: 160, top: 10, axis: 22, left: 34, right: 6, maxBar: 18, gap: 2, radius: 4, tickCount: 4 };
