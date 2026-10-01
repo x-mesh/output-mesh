@@ -27,7 +27,7 @@ bun bin/output-mesh.mjs start|stop|restart|status|uninstall
 | `lib/scanner.mjs` | 순수 경로 분류. 파일시스템을 만지지 않는다 |
 | `lib/aside-reader.mjs` | Aside `state.db` 읽기 전용 |
 | `lib/cursor-reader.mjs` | Cursor `state.vscdb` 읽기 전용. composer 가 고친 파일 |
-| `lib/claude-desktop-reader.mjs` | Claude 데스크톱 앱의 HTTP 캐시 읽기 전용. 완전한 아티팩트 HTML 을 카탈로그 폴더에 옮겨 적는다 |
+| `lib/claude-desktop-reader.mjs` | Claude 데스크톱 앱의 HTTP 캐시 읽기 전용. 아티팩트 HTML · 채팅이 쓴 파일 · 위젯을 카탈로그 폴더에 옮겨 적는다 |
 | `lib/session-logs.mjs` | Codex rollout · Claude Code transcript 에서 쓴 경로 수확 |
 | `lib/collector.mjs` | 스윕 · 보강 · 색인 |
 | `lib/store.mjs` + `schema.sql` | SQLite 인덱스 |
@@ -73,9 +73,16 @@ bun bin/output-mesh.mjs start|stop|restart|status|uninstall
 
 **Claude 데스크톱 앱은 캐시에서 읽고 사본을 둔다.** 앱이 아티팩트를 파일로 남기지 않아서 남는 자리는 Chromium HTTP 캐시(`~/Library/Application Support/Claude/Cache/Cache_Data/`)뿐이다. Claude 의 private API 나 sync WebSocket 은 부르지 않는다.
 
-- **허용한 주소만 읽는다.** `claude.ai/.../user_artifacts` 메타데이터와 `<uuid>.frame.claudeusercontent.com` 프레임 본문이다. `</html>` 까지 온 HTML 만 받는다.
-- **사본을 둔다.** 캐시 항목은 참조할 수 있는 파일이 아니고, 캐시는 언제든 밀려난다. UUID 마다 가장 새 버전을 `AgentOutputCatalog/claude-app-artifacts/<uuid>.html` 로 옮겨 적고 그 파일을 색인한다. "아티팩트 파일을 복사하지 않는다"의 유일한 예외다.
-- **건너뛰는 기준은 카탈로그다.** 사본은 카탈로그를 다시 만들어도 남는다. 사본이 같다는 것만으로 건너뛰면 새 카탈로그가 그 아티팩트를 영영 받지 못한다. 카탈로그가 그 버전을 받았고(`claude.version.<uuid>`) 사본도 같을 때만 건너뛴다.
+- **허용한 주소만 읽는다.** 모두 `claude.ai` 와 `<uuid>.frame.claudeusercontent.com` 의 것이다: 대화 응답(`chat_conversations/<id>`), 채팅이 만든 파일의 다운로드(`conversations/<id>/wiggle/download-file`), 프레임 본문(`/_f/<버전>/`), 메타데이터(`user_artifacts`). 프레임 호스트의 `_runtime/*.js` 는 본문이 아니다. 세던 때는 상태가 늘 `entry_invalid` 였다.
+- **채팅이 만든 파일은 대화 응답에 통째로 있다.** markdown 은 예전의 아티팩트가 아니라 `create_file` 로 만든 파일이라 `file_text` 에 본문이 남는다. 실측(캐시된 대화 34개)으로 46건이 나왔다: 다운로드 13 · 되짚은 파일 4 · 위젯 27 · 프레임 2. 프레임만 읽던 때는 2건이었다. `artifacts/<id>/versions` 응답 47건은 모두 비어 있어 읽지 않는다.
+- **보이는 분기만 따라간다.** `tree=True` 응답은 버린 분기까지 담는다(실측: 같은 대화의 중복을 포함한 응답 57건에서 분기점 7곳). `current_leaf_message_uuid` 에서 부모로 올라간 사슬의 `create_file` · `str_replace` 만 순서대로 적용한다. `str_replace` 는 정확히 한 곳이 맞을 때만 바꾼다.
+- **같은 파일이면 더 새것이 이긴다.** 되짚은 본문은 `bash_tool` 로 고친 내용을 모르고, 내려받은 파일은 서버가 준 그대로다. 그래서 대개 내려받은 바이트를 쓴다. 내려받은 뒤(캐시 항목의 수정 시각)에 대화가 `create_file` · `str_replace` 로 또 고쳤다면 되짚은 본문을 쓴다. 다운로드는 `content-length` 가 본문 길이와 같을 때만 받는다. 받는 도중에 캐시된 응답은 잘려 있다.
+- **위젯은 제목으로 묶는다.** 한 대화에서 같은 제목으로 다시 그린 위젯은 마지막 것만 남는다. Claude 의 CSS 없이 그려지므로 숨긴 제목(`sr-only`)도 글자로 보인다.
+- **`/home/claude` 는 모으지 않는다.** 채팅의 작업 폴더라 Claude Code 의 세션 임시 폴더와 같은 자리다. 사람에게 건넨 파일은 `/mnt/user-data/outputs/` 에 있다.
+- **404 는 오류가 아니다.** 지운 대화의 404 응답도 캐시에 남는다(실측 3건). 서버의 답이라 `entry_invalid` 로 세지 않는다.
+- **본문은 Simple Cache 구조대로 읽는다.** 키 뒤가 본문이고 EOF 매직(`d8410d97456ffaf4`) 뒤가 HTTP 헤더다. 본문은 content-encoding 그대로 저장돼 있다. 프레임 본문만 아직 예전의 추정 경로로 읽는다.
+- **사본을 둔다.** 캐시 항목은 참조할 수 있는 파일이 아니고, 캐시는 언제든 밀려난다. `AgentOutputCatalog/claude-app-artifacts/` 아래에 프레임은 `<uuid>.html`, 채팅 파일은 `<대화 uuid>/<outputs 아래 경로>`, 위젯은 `<대화 uuid>/widgets/<제목>.html` 로 옮겨 적고 그 파일을 색인한다. "아티팩트 파일을 복사하지 않는다"의 유일한 예외다.
+- **건너뛰는 기준은 카탈로그다.** 사본은 카탈로그를 다시 만들어도 남는다. 사본이 같다는 것만으로 건너뛰면 새 카탈로그가 그 아티팩트를 영영 받지 못한다. 카탈로그가 그 버전(프레임은 `claude.version.<uuid>`, 나머지는 `claude.file.<경로>` 의 내용 해시)을 받았고 사본도 같을 때만 건너뛴다.
 - **세션 로그와 같은 조건으로 돈다.** 실제 홈의 캐시(실측 18,046개, 837MB)를 훑고 카탈로그 폴더에 쓰기 때문이다. 조건이 없을 때는 `withSessionLogs` 를 끈 워처 테스트가 실제 폴더에 사본을 남겼다.
 - **색은 Claude 색이다.** 다섯째 색을 들이지 않는 이유는 Cursor 와 같다. Claude Code 와 색이 겹치므로 `AGENT_ORDER` 에서 둘 사이에 다른 에이전트를 둔다. 활동이 둘뿐인 기간에는 그래도 붙어 보인다.
 
@@ -230,7 +237,7 @@ macOS. bun ≥ 1.3. 시스템 `unzip`(xlsx 본문 추출). Aside가 없으면 �
 
 - 원본 폴더와 에이전트 데이터에 **쓰지 않는다**. `state.db`는 readonly 연결로만 연다.
 - 아티팩트 파일을 복사하지 않는다. 인덱스는 원본을 참조만 한다.
-- **복사의 예외는 Claude 데스크톱 앱 하나다.** 원본이 파일이 아니라 앱의 HTTP 캐시 항목이라 참조할 경로가 없다. 완전한 HTML 본문만 카탈로그 폴더의 `claude-app-artifacts/` 에 옮겨 적고, Claude 의 폴더에는 쓰지 않는다.
+- **복사의 예외는 Claude 데스크톱 앱 하나다.** 원본이 파일이 아니라 앱의 HTTP 캐시 항목이라 참조할 경로가 없다. 캐시에서 되살린 본문(아티팩트 HTML · 채팅이 쓴 파일 · 위젯)만 카탈로그 폴더의 `claude-app-artifacts/` 에 옮겨 적고, Claude 의 폴더에는 쓰지 않는다.
 - 아티팩트 HTML은 `connect-src 'none'` CSP와 `allow-same-origin` 없는 iframe에서만 렌더한다. 스크립트를 허용해도 스크립트가 네트워크를 부를 길은 열리지 않는다.
 - **예외는 drawio 의 도형 이미지 하나다.** `img-src` 에만 `https:` 를 허용한다. 막으면 구성도의 아이콘이 통째로 빈 칸이 되어(실측 306개 중 상대경로 221건 · 절대 주소 195건) 도면을 읽을 수 없었다. 대가는 분명하다 — 미리보기를 여는 순간 그 주소로 요청이 나가고, **주소는 문서를 만든 쪽이 정한다.** 이미지 말고는 아무것도 열지 않는다.
 - 서버는 `127.0.0.1`에만 바인딩한다.
