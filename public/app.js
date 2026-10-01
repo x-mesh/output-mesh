@@ -210,7 +210,7 @@ function providerChips(providers) {
       attrs: { 'data-provider': provider },
       onclick: (event) => {
         event.stopPropagation();
-        toggleFilter('provider', provider);
+        onlyFilter('provider', provider);
       },
     }, PROVIDER_LABEL[provider] ?? provider));
 }
@@ -255,7 +255,10 @@ function locationNodes(row) {
 /** 목록과 사이드바가 같은 범위를 보도록 한 곳에서 만든다. */
 function searchParams(extra = {}) {
   const params = new URLSearchParams({ q: state.q, view: 'library', ...extra });
-  for (const [key, value] of Object.entries(state.filters)) params.set(key, value === true ? '1' : value);
+  for (const [key, value] of Object.entries(state.filters)) {
+    if (value === true) params.set(key, '1');
+    else for (const item of value) params.append(key, item);
+  }
   if (state.period !== 'all') params.set('period', state.period);
   return params;
 }
@@ -263,7 +266,7 @@ function searchParams(extra = {}) {
 /** 활동 보기가 듣는 것만. 목록이 무시하는 필터로 사이드바를 좁히면 없는 것을 광고한다. */
 function activityParams() {
   const params = new URLSearchParams();
-  for (const key of ACTIVITY_FILTERS) if (state.filters[key]) params.set(key, state.filters[key]);
+  for (const key of ACTIVITY_FILTERS) for (const item of selected(key)) params.append(key, item);
   if (state.period !== 'all') params.set('period', state.period);
   return params;
 }
@@ -413,12 +416,35 @@ function setMode(mode) {
   void refresh();
 }
 
+/**
+ * 한 차원에서 고른 값들. 같은 차원 안은 '또는'이라 여러 개를 고를 수 있다. 즐겨찾기만은 켜고 끄는
+ * 스위치라 값 목록이 아니다.
+ */
+const selected = (key) => (key === 'favorite' ? (state.filters.favorite ? [true] : []) : state.filters[key] ?? []);
+const isSelected = (key, value) => selected(key).includes(value);
+
+function setSelected(key, values) {
+  if (values.length === 0) delete state.filters[key];
+  else state.filters[key] = key === 'favorite' ? true : values;
+}
+
+/** 패널의 값은 더하고 뺀다. */
 function toggleFilter(key, value) {
-  const on = state.filters[key] === value;
-  if (on) delete state.filters[key];
-  else state.filters[key] = value;
+  const on = isSelected(key, value);
+  setSelected(key, on ? selected(key).filter((item) => item !== value) : [...selected(key), value]);
+  applyFilters(key, on);
+}
+
+/** "~만 보기"(행의 에이전트 칩, 분포 막대)는 그 값 하나로 좁힌다. 이미 그것만 보고 있으면 푼다. */
+function onlyFilter(key, value) {
+  const on = selected(key).length === 1 && isSelected(key, value);
+  setSelected(key, on ? [] : [value]);
+  applyFilters(key, on);
+}
+
+function applyFilters(key, cleared) {
   // 활동 보기는 수집기·작업공간만 본다. 다른 필터를 누르면 그 필터가 듣는 화면으로 간다.
-  if (!on && state.mode === 'activity' && !ACTIVITY_FILTERS.has(key)) setModeState('library');
+  if (!cleared && state.mode === 'activity' && !ACTIVITY_FILTERS.has(key)) setModeState('library');
   state.searchOpen = {};
   void refresh();
 }
@@ -453,15 +479,30 @@ function filterDisplay(key, value) {
   }
 }
 
+/**
+ * 에이전트·앱 이름 앞의 표시. 공식 로고가 없는 에이전트(ai-mesh, Aside)는 색 점이다. 저장소 감시·가져오기는
+ * 에이전트 활동이 아니라서 아무것도 달지 않는다 — 점은 "에이전트"로 읽힌다.
+ */
+function agentMark(key, value) {
+  if (key !== 'provider' && key !== 'collector') return null;
+  const provider = key === 'provider' ? value : PROVIDER_OF_COLLECTOR[value] ?? (value === 'aside' ? 'aside' : null);
+  if (!provider) return null;
+  return LOGO_OF_PROVIDER[provider]
+    ? logo(LOGO_OF_PROVIDER[provider])
+    : el('span', { className: 'dot', attrs: { 'data-provider': provider, 'aria-hidden': 'true' } });
+}
+
 function renderActiveFilters() {
-  const tokens = Object.entries(state.filters).map(([key, value]) =>
+  const tokens = Object.keys(state.filters).flatMap((key) => selected(key).map((value) =>
     el('button', {
       type: 'button',
       className: 'token',
       title: t('filter.clearOne'),
       onclick: () => toggleFilter(key, value),
-    }, filterDisplay(key, value), el('span', { className: 'token-x', attrs: { 'aria-hidden': 'true' } }, '×')));
+    }, agentMark(key, value), filterDisplay(key, value), el('span', { className: 'token-x', attrs: { 'aria-hidden': 'true' } }, '×'))));
   $('active-filters').replaceChildren(...tokens);
+  // 고르는 동안 토큰이 늘어 줄이 바뀌면 패널도 따라 내려간다.
+  if ($('facets').matches(':popover-open')) placeFilters();
 }
 
 async function loadFacets() {
@@ -552,20 +593,21 @@ function renderFilters(data) {
   }, el('span', { className: 'facet-name' }, t('facet.favoritesOnly')));
 
   const sections = groups.filter(([, , items]) => items?.length).map(([key, label, items]) => {
-    const active = state.filters[key];
-    const group = el('details', { className: 'facet-group', open: Boolean(facetOpen[key] || active) },
+    const picked = selected(key);
+    const group = el('details', { className: 'facet-group', open: Boolean(facetOpen[key] || picked.length) },
       el('summary', { attrs: { 'data-facet': `group:${key}` } }, icon('chevron', 'chevron'), el('span', {}, label),
-        active !== undefined && el('span', { className: 'facet-active' }, filterDisplay(key, active).replace(/^[^:]+: /, ''))),
+        picked.length > 0 && el('span', { className: 'facet-active' }, picked.map((value) => filterDisplay(key, value).replace(/^[^:]+: /, '')).join(', '))),
       ...items.filter((item) => item.value).map((item) => {
         // 라이브러리에서 코드는 목록에 없다. 같은 모양으로 두면 고친 걸로 읽히지 않는다.
-        const outOfScope = key === 'kind' && hidden.has(item.value) && active !== item.value;
+        const outOfScope = key === 'kind' && hidden.has(item.value) && !picked.includes(item.value);
         return el('button', {
           type: 'button',
           className: `facet${outOfScope ? ' out-of-scope' : ''}`,
           title: outOfScope ? t('facet.outOfScopeTitle') : String(item.value),
-          attrs: { 'aria-pressed': String(active === item.value), 'data-facet': `${key}:${item.value}` },
+          attrs: { 'aria-pressed': String(picked.includes(item.value)), 'data-facet': `${key}:${item.value}` },
           onclick: () => toggleFilter(key, item.value),
         },
+          agentMark(key, item.value),
           el('span', { className: 'facet-name' }, item.display ?? item.value),
           outOfScope && el('span', { className: 'facet-note' }, t('facet.outOfScope')),
           el('span', { className: 'n' }, item.n.toLocaleString(locale())));
@@ -583,7 +625,7 @@ function renderFilters(data) {
   if (focused) $('facets').querySelector(`[data-facet="${CSS.escape(focused)}"]`)?.focus();
   renderActiveFilters();
 
-  const outside = state.mode === 'library' && !state.filters.kind
+  const outside = state.mode === 'library' && selected('kind').length === 0
     ? data.kinds.filter((k) => hidden.has(k.value)).reduce((sum, k) => sum + k.n, 0)
     : 0;
   $('out-of-scope').replaceChildren(outside > 0
@@ -621,8 +663,8 @@ function renderStats() {
       title: t('stat.libraryTitle'),
     }),
     stat(numbers.final, t('stat.final'), {
-      pressed: state.mode === 'library' && state.filters.state === 'final',
-      onclick: () => toggleFilter('state', 'final'),
+      pressed: state.mode === 'library' && selected('state').length === 1 && isSelected('state', 'final'),
+      onclick: () => onlyFilter('state', 'final'),
       title: t('stat.finalTitle'),
     }),
     stat(numbers.recent, t('stat.recent', { n: numbers.recentDays }), {
@@ -2276,8 +2318,8 @@ function distribution(title, rows, { key, agentColor = false, note = null }) {
             type: 'button',
             className: 'dist-row',
             title: row.title ?? t('dist.only', { label: row.label }),
-            attrs: { 'aria-pressed': String(state.filters[key] === row.value) },
-            onclick: () => toggleFilter(key, row.value),
+            attrs: { 'aria-pressed': String(isSelected(key, row.value)) },
+            onclick: () => onlyFilter(key, row.value),
           },
             el('span', { className: 'dist-label' }, row.label),
             el('span', { className: 'dist-track' },
@@ -2294,8 +2336,8 @@ function distKinds() {
   const facets = state.facets;
   if (!facets) return noFacets();
   const hidden = new Set(facets.libraryHidden ?? []);
-  const kinds = facets.kinds.filter((k) => !hidden.has(k.value) || state.filters.kind === k.value);
-  const outside = state.filters.kind ? 0 : facets.kinds.filter((k) => hidden.has(k.value)).reduce((s, k) => s + k.n, 0);
+  const kinds = facets.kinds.filter((k) => !hidden.has(k.value) || isSelected('kind', k.value));
+  const outside = selected('kind').length > 0 ? 0 : facets.kinds.filter((k) => hidden.has(k.value)).reduce((s, k) => s + k.n, 0);
   return distribution(t('dist.kind'), kinds.slice(0, DIST_ROWS).map((k) => ({ value: k.value, label: kindLabel(k.value), n: k.n })), {
     key: 'kind',
     note: outside > 0 && el('button', {
@@ -2561,11 +2603,14 @@ function openFilters() {
   if (!$('facets').matches(':popover-open')) $('facets').showPopover();
 }
 
-/** 패널은 최상위 층에 떠서 사이드바 흐름과 무관하다. 버튼 바로 아래에 두되 화면 밖으로 나가지 않게 한다. */
+/**
+ * 패널은 최상위 층에 떠서 사이드바 흐름과 무관하다. 버튼이 아니라 필터 줄 전체 아래에 둔다 — 값을 여럿 고르면
+ * 토큰이 다음 줄로 넘어가는데, 버튼에 붙이면 그 줄을 패널이 가린다. 화면 밖으로는 나가지 않게 한다.
+ */
 function placeFilters() {
   const anchor = $('filters-button').getBoundingClientRect();
   const panel = $('facets');
-  panel.style.top = `${anchor.bottom + FILTER_PANEL_GAP}px`;
+  panel.style.top = `${$('filters').getBoundingClientRect().bottom + FILTER_PANEL_GAP}px`;
   const width = panel.getBoundingClientRect().width;
   panel.style.left = `${Math.max(FILTER_PANEL_GAP, Math.min(anchor.left, innerWidth - width - FILTER_PANEL_GAP))}px`;
 }
@@ -2573,9 +2618,8 @@ function placeFilters() {
 $('facets').addEventListener('beforetoggle', (event) => {
   // 열리기 전에 자리를 잡아 둔다. 그러지 않으면 한 번 화면 가운데에 그려졌다가 옮겨진다.
   if (event.newState === 'open') {
-    const anchor = $('filters-button').getBoundingClientRect();
-    $('facets').style.top = `${anchor.bottom + FILTER_PANEL_GAP}px`;
-    $('facets').style.left = `${anchor.left}px`;
+    $('facets').style.top = `${$('filters').getBoundingClientRect().bottom + FILTER_PANEL_GAP}px`;
+    $('facets').style.left = `${$('filters-button').getBoundingClientRect().left}px`;
   }
 });
 $('facets').addEventListener('toggle', (event) => {
