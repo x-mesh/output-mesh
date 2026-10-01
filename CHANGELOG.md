@@ -22,6 +22,7 @@ lives in `package.json`; `output-mesh --version` and the explorer footer show it
 - **ui:** rewrite Korean labels that read like literal translations, for example the change feed is now "최근 변경"
 - **ui:** align the Output Mesh title with the node chip and the view switch in the top bar
 - **ui:** clicking the top-bar collection error opens the errors and marks them as seen, so the bar returns to the live state until a newer error arrives
+- **collect:** watch the git worktrees of each repository that an agent worked in, so documents edited there with shell commands are collected. The first scan of a worktree skips the files that its checkout wrote
 - **collect:** collect Gemini Antigravity session artifacts and the files that its write tools changed. A broken transcript line is skipped with one warning that names the file and line
 
 ## [0.7.0] - 2026-10-01
