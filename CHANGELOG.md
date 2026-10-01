@@ -30,6 +30,7 @@ lives in `package.json`; `output-mesh --version` and the explorer footer show it
 - **cli:** `coverage` and `compact` print English, like the rest of the terminal output
 - **ui:** the English change feed is now "Recent changes" (was "Just happened")
 - **docs:** bring both READMEs up to date (service install, overview widgets, filters panel, several machines, collection errors, `compact`) and rewrite awkward phrasing
+- **collect:** collect the images that the Codex image generation tool made (`~/.codex/generated_images/`) with their Codex session. They follow the temporary-images switch and show a "generated" mark
 - **activity:** a **Follow** switch in the Activity header jumps to the top whenever new work arrives, even while you scroll down. It is off by default
 - **activity:** the Activity view always shows temporary images, with a **Small | Large** preview size. Large previews show what a screenshot is. New cards and images are highlighted for a few seconds, and while you scroll down, the card you read stays in place under a "new tasks" button
 - **ui:** the temporary-images switch moved from the filter panel to the end of the filter row, where it is always visible
