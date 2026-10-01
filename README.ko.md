@@ -58,6 +58,7 @@ bun bin/output-mesh.mjs
 | Aside | `~/.aside/u/<계정>/sessions/<날짜>_<id>/artifacts/` | 폴더 감시, Aside 의 `state.db` 로 보강(읽기 전용으로 연다) |
 | Codex | `~/.codex/sessions/**/rollout-*.jsonl` | 세션 로그의 `apply_patch` 마커에서 쓴 경로 |
 | Claude Code | `~/.claude/projects/**/*.jsonl` | `Write` / `Edit` 도구 호출의 `file_path` |
+| Claude Desktop | `~/Library/Application Support/Claude/Cache/Cache_Data/` | 로컬에 저장된 메타데이터와 완전한 아티팩트 HTML을 읽는다 |
 | Cursor | `~/Library/Application Support/Cursor/.../state.vscdb` | composer 가 고치거나 새로 만든 파일 (읽기 전용으로 연다) |
 | 내 저장소 | 위의 에이전트가 일한 저장소 | 최근 7일 안에 바뀐 문서, 그 뒤로는 폴더 감시로 새로 생기거나 바뀐 문서 |
 | 그 밖의 것 | 직접 고른 폴더나 파일 | `output-mesh import <경로>` |
@@ -65,6 +66,8 @@ bun bin/output-mesh.mjs
 Codex 와 Claude Code 는 산출물을 따로 모아 두지 않는다. 대신 로그에 어느 경로에 썼는지가 남아서, 아직 저장소에 있는 파일에 출처만 붙이고 파일은 그 자리에 둔다.
 
 라이브러리에는 문서, 웹 페이지, 이미지, 스프레드시트, 묶음 폴더가 보인다. 소스 코드, 에이전트 메모, 모르는 형식도 모으지만 기본으로 숨긴다. 에이전트 메모는 Claude Code 가 `~/.claude/projects/*/memory/` 에 적어 두는 memory 파일이다. 필요하면 종류 필터에서 고른다. "방금 일어난 일"도 이것들을 빼고, 뺀 건수를 알려준다.
+
+Claude Desktop 수집은 로컬 Chromium HTTP cache만 읽는다. Claude private API나 sync WebSocket을 호출하지 않는다. Claude Desktop이 메타데이터와 완전한 frame body를 cache에 저장한 뒤 아티팩트가 나타난다. cache eviction 뒤에도 마지막으로 수집한 로컬 사본은 남고, private cache format이 바뀌면 이 출처가 멈출 수 있다.
 
 git worktree 는 본 저장소로 센다. 트리에서는 그 저장소 아래에 `⑂ 이름` 묶음으로 나온다. Claude Code 의 세션 임시 폴더(`/private/tmp/claude-*/`)는 모으지 않는다.
 
