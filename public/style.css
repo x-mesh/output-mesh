@@ -900,6 +900,9 @@ embed.preview-fill { height: 100%; }
 .activity-new { position: sticky; top: 0; z-index: 1; display: flex; justify-content: center; list-style: none; padding: var(--space-1) 0; }
 .activity-new button { min-height: 24px; font-size: var(--text-xs); border-color: var(--accent); color: var(--accent); background: var(--bg); box-shadow: 0 1px 3px rgba(0, 0, 0, .12); }
 .thumb-size button { min-width: 40px; min-height: 22px; font-size: var(--text-xs); }
+/* 활동 보기의 두 조절(그림 크기 · 따라가기)은 오른쪽에 붙여 둔다. */
+.explorer-head .thumb-size { margin-left: auto; }
+.follow-toggle { min-height: 22px; margin-left: var(--space-1); padding: 0 var(--space-2); font-size: var(--text-xs); }
 /* 세션 작업 폴더의 이미지. 파일 이름 대신 작은 그림으로 따로 묶는다. 칸은 고정이라 그림이 늦게 와도 줄이 밀리지 않는다. */
 .session-scratch { margin-top: var(--space-2); display: grid; gap: var(--space-1); }
 .session-scratch-head { display: flex; align-items: center; gap: 6px; font-size: var(--text-xs); color: var(--text-dim); }
