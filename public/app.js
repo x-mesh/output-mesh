@@ -36,6 +36,8 @@ const GROUPINGS = ['repo', 'provider', 'collector', 'date', 'kind'];
 const state = {
   q: '',
   filters: {},
+  // 세션 작업 폴더의 임시 이미지를 보일까. 필터가 아니라 보기 설정이라 필터를 지워도 남고, 이 브라우저에 기억한다.
+  showTemporary: false,
   mode: 'library',
   view: 'home',
   selected: null,
@@ -85,6 +87,7 @@ const prefs = {
     }
   },
 };
+state.showTemporary = prefs.read('show.temporary', false) === true;
 const openState = prefs.read('tree.open', {});
 const facetOpen = prefs.read('facets.open', { kind: true });
 let inspectorOpen = prefs.read('inspector.open', true);
@@ -265,6 +268,7 @@ function searchParams(extra = {}) {
     else for (const item of value) params.append(key, item);
   }
   if (state.period !== 'all') params.set('period', state.period);
+  if (state.showTemporary) params.set('temporary', '1');
   return params;
 }
 
@@ -273,7 +277,17 @@ function activityParams() {
   const params = new URLSearchParams();
   for (const key of ACTIVITY_FILTERS) for (const item of selected(key)) params.append(key, item);
   if (state.period !== 'all') params.set('period', state.period);
+  if (state.showTemporary) params.set('temporary', '1');
   return params;
+}
+
+/** 임시 이미지를 보이거나 숨긴다. 목록 · 건수 · 피드 · 활동 · 개요가 한꺼번에 따라 바뀐다. */
+function setShowTemporary(on) {
+  state.showTemporary = on;
+  prefs.write('show.temporary', on);
+  // 임시 이미지 위젯이 격자에 들어가거나 빠진다. 블록을 켜고 끌 때처럼 격자를 다시 세운다.
+  grid = null;
+  void refresh();
 }
 
 const isSearching = () => state.q.trim() !== '' || Object.keys(state.filters).length > 0 || state.period !== 'all';
@@ -597,6 +611,16 @@ function renderFilters(data) {
     onclick: () => toggleFilter('favorite', true),
   }, el('span', { className: 'facet-name' }, t('facet.favoritesOnly')));
 
+  // 숨긴 수를 함께 적는다. 꺼 두면 무엇이 빠졌는지 보이지 않는다.
+  const temporary = el('button', {
+    type: 'button',
+    className: 'facet facet-favorite',
+    title: t('facet.temporaryTitle'),
+    attrs: { 'aria-pressed': String(state.showTemporary), 'data-facet': 'temporary' },
+    onclick: () => setShowTemporary(!state.showTemporary),
+  }, el('span', { className: 'facet-name' }, t('facet.temporary')),
+  !state.showTemporary && data.temporaryHidden > 0 && el('span', { className: 'n' }, data.temporaryHidden.toLocaleString(locale())));
+
   const sections = groups.filter(([, , items]) => items?.length).map(([key, label, items]) => {
     const picked = selected(key);
     const group = el('details', { className: 'facet-group', open: Boolean(facetOpen[key] || picked.length) },
@@ -626,7 +650,7 @@ function renderFilters(data) {
 
   // 필터를 고를 때마다 목록을 통째로 다시 그린다. 패널 안에서 고르던 키보드 초점이 사라지지 않게 같은 항목으로 되돌린다.
   const focused = $('facets').contains(document.activeElement) ? document.activeElement.dataset.facet : null;
-  $('facets').replaceChildren(...keep([favorite, ...sections]));
+  $('facets').replaceChildren(...keep([favorite, temporary, ...sections]));
   if (focused) $('facets').querySelector(`[data-facet="${CSS.escape(focused)}"]`)?.focus();
   renderActiveFilters();
 
@@ -650,7 +674,7 @@ function renderFilters(data) {
 // ── 현황 ───────────────────────────────────────────────────────────────
 
 async function refreshOverview() {
-  state.overview = await api('/api/overview');
+  state.overview = await api(`/api/overview${state.showTemporary ? '?temporary=1' : ''}`);
   renderStats();
 }
 
@@ -1881,7 +1905,9 @@ function hiddenChangesLine() {
     t('changes.hidden'), ' ',
     ...entries.flatMap(([kind, n], i) => keep([
       i > 0 && ' · ',
-      el('button', { type: 'button', className: 'link', onclick: () => toggleFilter('kind', kind) }, t('changes.hiddenKind', { kind: kindLabel(kind), n })),
+      kind === 'temporary'
+        ? el('button', { type: 'button', className: 'link', onclick: () => setShowTemporary(true) }, t('changes.hiddenTemporary', { n }))
+        : el('button', { type: 'button', className: 'link', onclick: () => toggleFilter('kind', kind) }, t('changes.hiddenKind', { kind: kindLabel(kind), n })),
     ])));
 }
 
@@ -1921,7 +1947,7 @@ async function renderHome() {
     fetchIf(on.has('activity'), `/api/timeline?${searchParams()}`),
     fetchIf(on.has('sessions'), `/api/activity?${activityParams()}`).then((got) => got?.sessions ?? null),
     fetchIf(on.has('status'), '/api/status'),
-    fetchIf(on.has('scratch'), `/api/activity?${activityParams()}&scratch=1`).then((got) => got?.sessions ?? null),
+    fetchIf(on.has('scratch') && state.showTemporary, `/api/activity?${activityParams()}&scratch=1`).then((got) => got?.sessions ?? null),
   ]);
   if (token !== homeToken || state.view !== 'home') return;
 
@@ -2130,7 +2156,9 @@ function dashboard() {
   const finals = state.rows.filter((r) => r.state === 'final');
   const repos = new Set(state.rows.map((r) => r.location?.repo).filter(Boolean));
   const layout = homeLayout();
-  const on = homeBlocks().filter((block) => block.on).map((block) => block.id);
+  // 임시 이미지를 숨겼으면 그 위젯도 빼고, 숨긴 수를 머리 줄에 한 줄로 남긴다. 빈 위젯이 자리만 차지하지 않게.
+  const on = homeBlocks().filter((block) => block.on && (block.id !== 'scratch' || state.showTemporary)).map((block) => block.id);
+  const hiddenTemporary = state.showTemporary ? 0 : state.facets?.temporaryHidden ?? 0;
 
   return el('div', { className: 'dash' },
     el('header', { className: 'dash-head' },
@@ -2138,7 +2166,9 @@ function dashboard() {
         // 기간은 필터가 아니라 보는 창이다. 제목은 그대로 두고 부제에 기간을 적는다.
         el('h2', {}, t(state.q.trim() ? 'home.search' : Object.keys(state.filters).length ? 'home.filter' : 'home.library')),
         el('p', { className: 'dash-sub' },
-          [state.period !== 'all' && t(`periodTitle.${state.period}`), t('home.count', { n: state.total }), t('home.finals', { n: finals.length }), t('home.repos', { n: repos.size })].filter(Boolean).join(' · '))),
+          [state.period !== 'all' && t(`periodTitle.${state.period}`), t('home.count', { n: state.total }), t('home.finals', { n: finals.length }), t('home.repos', { n: repos.size })].filter(Boolean).join(' · '),
+          hiddenTemporary > 0 && ' · ',
+          hiddenTemporary > 0 && el('button', { type: 'button', className: 'link', title: t('facet.temporaryTitle'), onclick: () => setShowTemporary(true) }, t('home.temporaryHidden', { n: hiddenTemporary })))),
       homeConfig()),
     on.length === 0
       ? el('div', { className: 'dash-off' },
@@ -2743,7 +2773,7 @@ $('facets').addEventListener('keydown', (event) => {
   // 접힌 묶음 안의 항목도 레이아웃 크기는 가져서 화면 크기로는 가려지지 않는다. 그런 항목은 초점을 받지 못한다.
   const reachable = (node) => node.tagName === 'SUMMARY' || !node.closest('details') || node.closest('details').open;
   const items = [...$('facets').querySelectorAll('button, summary')].filter(reachable);
-  const heads = items.filter((node) => node.tagName === 'SUMMARY' || node.dataset.facet === 'favorite');
+  const heads = items.filter((node) => node.tagName === 'SUMMARY' || node.dataset.facet === 'favorite' || node.dataset.facet === 'temporary');
   const step = (list, delta) => {
     const at = list.indexOf(document.activeElement);
     const here = at >= 0 ? at : list.findLastIndex((node) => node.compareDocumentPosition(document.activeElement) & Node.DOCUMENT_POSITION_FOLLOWING);
