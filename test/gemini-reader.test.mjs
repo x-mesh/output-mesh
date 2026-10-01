@@ -139,6 +139,8 @@ describe('Gemini Antigravity reader', () => {
       await reader.scan();
       writeFileSync(log, body);
       expect(await sweepGemini(store, reader)).toMatchObject({ errors: 0, invalidLines: 1 });
+      // 재시작하면 리더의 기억이 비지만, 카탈로그에 이미 있는 경고는 다시 남기지 않는다.
+      expect(await sweepGemini(store, new GeminiReader({ roots: [root] }))).toMatchObject({ errors: 0, invalidLines: 1 });
       expect(store.db.query("SELECT level, code, path, message FROM ingest_events WHERE code LIKE 'gemini%'").all())
         .toEqual([{ level: 'warn', code: 'gemini_line_skipped', path: log, message: 'Line 2 is not a transcript record (not-json); skipped.' }]);
       expect(store.getState('gemini.last_sweep_code')).toBe('ok');
