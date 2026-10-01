@@ -5,8 +5,8 @@
 <h1 align="center">output-mesh</h1>
 
 <p align="center">
-  A local catalog of what your AI agents made.<br />
-  Find any artifact in seconds, preview it safely, and see which agent and session wrote it.
+  A local catalog of the files that your AI agents make.<br />
+  Find an artifact in seconds, preview it safely, and see the agent and the session that wrote it.
 </p>
 
 <p align="center">
@@ -18,32 +18,33 @@
 
 ## Why
 
-Agents write reports, PRDs, spreadsheets, HTML prototypes, and images into session folders and repositories. A week later you remember the work, not the file name or where it landed. Half of the files are called `README.md` or `SKILL.md`.
+Agents write reports, PRDs, spreadsheets, HTML prototypes, and images into session folders and repositories. A week later, you remember the task, but not the file name or the location. Many files also have the same name, for example `README.md` or `SKILL.md`.
 
-output-mesh reads those places **without touching them** and gives you one library: searchable by file name, body, and the task that produced it, with the originating agent, session, and repository attached to every file.
+output-mesh reads those locations **and never changes them**. It puts the files into one library. You can search by file name, by body text, and by the task that made the file. Each file shows the agent, the session, and the repository that it came from.
 
 <p align="center">
-  <img src="./assets/demo.gif" alt="output-mesh: browse the library, open an artifact with its originating agent and session, search by task, and watch a new file appear live" width="900" />
+  <img src="./assets/demo.gif" alt="output-mesh: browse the library, open an artifact with the agent and the session that made it, search by task, and see a new file appear live" width="900" />
 </p>
 
-<p align="center"><sub>Recorded against isolated sample data, not real logs.</sub></p>
-
+<p align="center"><sub>The recording uses isolated sample data, not real logs.</sub></p>
 
 ## Quick start
 
-Requires macOS and [Bun](https://bun.sh) 1.3 or newer. Nothing to install:
+You need macOS and [Bun](https://bun.sh) 1.3 or later. You do not need to install output-mesh:
 
 ```bash
 bunx output-mesh
 ```
 
-Bun keeps the downloaded package, so later runs start right away. Use `bunx output-mesh@latest` to pick up a new release, or `bunx github:x-mesh/output-mesh` for the latest commit on `main`.
+Then open http://127.0.0.1:19843.
 
-Open http://127.0.0.1:19843. The interface speaks English and Korean: it follows your browser language, and `KO` / `EN` in the top bar switches it. Terminal output (the first-run progress and command help) is Korean for now.
+Bun keeps the downloaded package, so the next start is fast. To get a new release, run `bunx output-mesh@latest`. To get the latest commit on `main`, run `bunx github:x-mesh/output-mesh`.
 
-The first run reads every agent log once and shows progress while it does (about 20 seconds for 3.6 GB of Codex logs on an Apple Silicon Mac). Later starts only read what changed.
+The first run reads all agent logs once and shows the progress. Later starts read only the changes.
 
-`npx` will not work: output-mesh uses Bun's built-in SQLite. To run from a checkout instead:
+The interface is in English and Korean, and it follows your browser language. To change the language, click `KO` or `EN` in the top bar. The startup screen and the command help are in English.
+
+`npx` does not work, because output-mesh uses the SQLite module that is part of Bun. To run output-mesh from a checkout:
 
 ```bash
 git clone https://github.com/x-mesh/output-mesh.git
@@ -51,50 +52,110 @@ cd output-mesh
 bun bin/output-mesh.mjs
 ```
 
+### Run it as a service
+
+To keep output-mesh on after you log in, install it as a service:
+
+```bash
+bun install -g output-mesh
+output-mesh install
+```
+
+On macOS, `install` adds a LaunchAgent. On Linux, it adds a systemd user unit. Use `output-mesh start`, `stop`, `restart`, and `status` to control the service. Use `output-mesh uninstall` to remove it.
+
+`install` does not accept a `bunx` copy, because that temporary path is gone after a restart. You can also run `bun bin/output-mesh.mjs install` from a checkout.
+
 ## What it collects
 
-| Source | Where | How |
+| Source | Location | Method |
 |---|---|---|
-| Aside | `~/.aside/u/<account>/sessions/<date>_<id>/artifacts/` | Watches the folder, enriches from Aside's `state.db` (opened read-only) |
-| Codex | `~/.codex/sessions/**/rollout-*.jsonl` | Paths from `apply_patch` markers in session logs |
-| Claude Code | `~/.claude/projects/**/*.jsonl` | `file_path` of `Write` / `Edit` tool calls |
+| Aside | `~/.aside/u/<account>/sessions/<date>_<id>/artifacts/` | Watches the folder. Reads more data from Aside's `state.db` in read-only mode |
+| Codex | `~/.codex/sessions/**/rollout-*.jsonl` | Paths from the `apply_patch` markers in session logs |
+| Claude Code | `~/.claude/projects/**/*.jsonl` | The `file_path` of `Write` and `Edit` tool calls |
 | Claude Desktop | `~/Library/Application Support/Claude/Cache/Cache_Data/` | Artifact HTML, files that chats wrote, and chat widgets from the local cache |
-| Gemini Antigravity | `~/.gemini/{antigravity,antigravity-cli,antigravity-ide}/brain/` | Local session artifacts and paths from write tool calls |
-| Cursor | `~/Library/Application Support/Cursor/.../state.vscdb` | Files a composer edited or created (opened read-only) |
-| Your repositories | Repositories any of the above worked in | Documents changed in the last 7 days, then a folder watch for new or edited ones |
-| Anything else | A folder or file you choose | `output-mesh import <path>` |
+| Gemini Antigravity | `~/.gemini/{antigravity,antigravity-cli,antigravity-ide}/brain/` | Local session artifacts and the paths from write tool calls |
+| Cursor | `~/Library/Application Support/Cursor/.../state.vscdb` | Files that a composer changed or created. Opens the database in read-only mode |
+| Your repositories | The repositories that the agents above worked in | Documents that changed in the last 7 days. After that, a folder watch finds new and changed documents |
+| Other files | A folder or a file that you select | `output-mesh import <path>` |
 
-Codex and Claude Code do not keep artifacts anywhere special. Their logs record which paths they wrote, so output-mesh attaches provenance to files that are still in your repositories and leaves them where they are.
+Codex and Claude Code do not keep artifacts in a special folder. But their logs record the paths that they wrote. output-mesh adds the agent and the session to the files that are still in your repositories. The files stay where they are.
 
-The library shows documents, web pages, images, spreadsheets, and bundles. output-mesh also collects source code, agent notes, and unknown formats, but the library hides them. Agent notes are the memory files that Claude Code keeps in `~/.claude/projects/*/memory/`. If you need a hidden kind, select it in the Kind filter. The "Just happened" feed hides the same kinds and shows the hidden count.
+The library shows documents, web pages, images, spreadsheets, and project folders. output-mesh also collects source code, agent notes, and other formats, but the library hides them. Agent notes are the memory files that Claude Code keeps in `~/.claude/projects/*/memory/`. To see a hidden kind, select it in the Kind filter. The "Recent changes" feed hides the same kinds and shows how many it hid.
 
-Claude Desktop collection reads the local Chromium HTTP cache only. It never calls private Claude APIs or sync WebSockets. It collects three things:
+Claude Desktop collection reads only the local Chromium HTTP cache. It does not call private Claude APIs or sync WebSockets. It collects three types of content:
 
-- Artifact HTML that Claude Desktop rendered.
-- Files that a chat wrote to `/mnt/user-data/outputs/`. A downloaded file keeps its exact bytes. A file rebuilt from the conversation does not include edits from shell commands.
-- Chat widgets, saved as HTML pages.
+- Artifact HTML that Claude Desktop showed.
+- Files that a chat wrote to `/mnt/user-data/outputs/`. A downloaded file keeps its exact bytes. A file that output-mesh rebuilds from the conversation does not include changes from shell commands.
+- Chat widgets. output-mesh saves each widget as an HTML page.
 
-The cache holds only the conversations that you opened in Claude Desktop. Cache eviction leaves the last collected local copy. If the private cache format changes, this source can stop.
+The cache keeps only the conversations that you opened in Claude Desktop. output-mesh keeps a copy of each file that it collects, so the file stays in the catalog after the cache deletes it. If Claude Desktop changes its private cache format, this source can stop.
 
-Gemini collection reads local Antigravity, Antigravity CLI, and Antigravity IDE data only. It reads canonical session artifacts and existing files referenced by `write_to_file` or `replace_file_content`. It excludes scratch files, uploads, generated internals, metadata, resolved revisions, backups, Gemini web Canvas, and downloaded images. It never reads Gemini account files or calls Gemini services. A referenced repository file appears only while that file exists.
+Gemini collection reads only local data from Antigravity, Antigravity CLI, and Antigravity IDE. It collects session artifacts and the current files that `write_to_file` or `replace_file_content` changed. It does not collect scratch files, uploads, generated internal files, metadata, `.resolved` revisions, backups, Gemini web Canvas, or downloaded images. It does not read Gemini account files or send requests to Gemini services. If a repository file no longer exists, output-mesh does not collect it.
 
-A git worktree counts as its main repository. The tree shows each worktree as a `⑂ name` group below that repository. output-mesh does not collect the temporary session folder of Claude Code (`/private/tmp/claude-*/`).
+Some lines in Antigravity transcripts are not valid JSON. output-mesh skips each of these lines and records one warning for it. A warning is not a collection error.
 
-## Using it
+output-mesh counts a git worktree as part of its main repository. The tree shows each worktree as a `⑂ name` group below that repository. output-mesh does not collect the temporary session folders of Claude Code (`/private/tmp/claude-*/`).
 
-**Explorer (left).** Search, a period (all, today, 7, 30, 90 days), a Filters button, and a tree. The Filters button opens a panel over the preview, so the tree stays in place. Selected filters stay as tokens next to the button, and `×` removes one. You can pick several values in one group, for example Codex and Claude Code. Values in one group match any of them, and different groups must all match. Group the tree by repository, agent, app, date, or kind. Each folder shows the logos of the agents that made its files. The agent grouping puts each product under its vendor, for example Claude Code and Claude Desktop under Claude. Every file shows a subtitle: the document's own title, or the task that created it when the title says nothing ("README", "Product").
+## How to use it
 
-If you type a search term, the tree becomes a flat list in relevance order. Each result shows its location and the text that matched. If you open a result, the preview marks each match and scrolls to the first match.
+### Explorer (left)
 
-**Overview (right, nothing selected).** "Just happened" comes first. It lists each file that an agent created, changed, moved, or removed, and it scrolls back through the last 30 days. Final files sit beside it. The feed omits a change if the agent made it more than four hours before output-mesh saw it. Below the lists are the charts: agent activity per hour, day, or week, and breakdowns by kind, agent, and workspace. Every bar is a filter.
+The explorer has a search box, a period selector (all, today, 7, 30, or 90 days), a Filters button, and a tree.
 
-**Detail (right, file selected).** The preview takes the space. Markdown renders with its front matter shown as a table. The inspector lists every session that touched the file, with tags, notes, and a "final" mark.
+- **Filters.** The filter panel opens above the preview, so the tree does not move. Each value that you select stays as a token next to the button. Click `×` on a token to remove that value.
+- **More than one value.** You can select more than one value in a group, for example Codex and Claude Code. A file matches a group if it matches one of the values. A file must match all groups.
+- **Groups.** You can group the tree by repository, agent, app, date, or kind. When you group by agent, each product is below its vendor, for example Claude Code and Claude Desktop below Claude.
+- **Logos.** Each folder shows the logos of the agents that made its files.
+- **Subtitles.** Each file shows the title of the document. If the title is too general, for example "README" or "Product", the file shows the task that made it.
+- **Large folders.** If an agent makes a full project in its artifact folder, the tree shows that project as one row. Click the row to see its files.
+- **Menu.** Right-click a row or press `Shift+F10` to open its menu: Final, Favorite, Show in Finder, and Copy path.
 
-**Activity.** A live timeline of agent sessions and the files each one wrote. If no file is selected, the timeline uses the full width. If you select a file, the timeline moves to the left column and the file opens on the right.
+If you type a search term, the tree changes to a flat list in relevance order. Each result shows its location and the text that matched. When you open a result, the preview highlights each match and goes to the first match.
 
-If a collection error occurs, the top bar shows "Collection error" for one hour. Click it to see the recent errors.
+### Overview (right, no file selected)
 
-Keyboard: `↑` `↓` move and open, `←` `→` collapse and expand, `/` search, `f` filters. Click the title to return to the overview; the browser back button works too.
+The overview is a grid of widgets. By default, it shows Recent changes, Final, the activity chart, and the breakdowns by kind, agent, and workspace. You can also turn on Recent tasks, Collection status, Favorites, and Tags.
+
+- To move a widget, drag its handle. To change its size, drag its bottom-right corner.
+- Click **Layout** to turn widgets on or off, move them, or restore the default layout. This panel also works with the keyboard.
+
+Recent changes lists each file that an agent created, changed, moved, or removed. Scroll down to see changes from the last 30 days. If output-mesh finds a change more than four hours after the agent made it, the feed does not show that change.
+
+The activity chart shows agent activity per hour, day, or week. To see the exact numbers, switch the chart to **Table**. Click a bar in any chart to filter by that value.
+
+### Detail (right, file selected)
+
+The preview uses most of the space. Markdown shows as formatted text, and its front matter shows as a table. Source code shows with syntax colors and line numbers. draw.io diagrams show in a read-only viewer.
+
+The inspector lists each session that changed the file. It also shows tags, notes, and the final mark.
+
+### Activity
+
+The Activity view is a live timeline of agent sessions and the files that each session wrote. If you do not select a file, the timeline uses the full width. If you select a file, the timeline moves to the left column and the file opens on the right.
+
+### Collection errors
+
+If a collection error occurs, the top bar shows "Collection error" for one hour. Click it to see the recent errors. After that, the top bar shows the live status again until a newer error occurs.
+
+### More than one machine
+
+If you use [Tailscale](https://tailscale.com), output-mesh finds the other machines in your tailnet that run it. Click the machine name in the top bar to see them. Each machine keeps its own catalog. Click a machine to open its catalog.
+
+To add a machine, run these commands on that machine:
+
+```bash
+output-mesh install
+tailscale serve --bg 19843
+```
+
+The server still listens only on `127.0.0.1`. Tailscale gives access to your tailnet only.
+
+### Keyboard
+
+- Press `↑` or `↓` to move through the tree and open each file.
+- Press `←` or `→` to collapse or expand a folder.
+- Press `/` to search. Press `f` to open the filters.
+- Click the title to go back to the overview. The browser Back button also works.
 
 ## Commands
 
@@ -102,39 +163,45 @@ Keyboard: `↑` `↓` move and open, `←` `→` collapse and expand, `/` search
 output-mesh                  # same as serve
 output-mesh serve [--port N] # http://127.0.0.1:19843 by default
 output-mesh sweep            # collect once and exit
-output-mesh import <path>    # register a folder or file (never copied)
-output-mesh coverage         # what was excluded and why
-output-mesh doctor           # source paths, database, and FTS5 health
-output-mesh --version        # print the version (also shown in the explorer footer)
+output-mesh import <path>    # add a folder or a file (output-mesh does not copy it)
+output-mesh coverage         # what output-mesh collected and what it left out
+output-mesh doctor           # health check: sources, database, search index, recent errors
+output-mesh compact          # reclaim free space in the catalog database
+output-mesh install          # run as a service, now and after each login
+output-mesh start|stop|restart|status
+output-mesh uninstall        # remove the service
+output-mesh --version        # print the version (the explorer footer also shows it)
 ```
 
 All commands accept `--db <path>` to use a different catalog file.
 
-## What it will not do
+The catalog database does not reclaim free space automatically. If the startup screen shows reclaimable space, run `output-mesh compact`. The command locks the catalog while it runs, and it can take several seconds.
 
-- **Write to your sources.** Session folders, logs, and repositories are only read. Aside's `state.db` is opened read-only.
-- **Copy your files.** The index points at the originals.
-- **Listen beyond your machine.** The server binds to `127.0.0.1` only.
-- **Let agent HTML phone home.** Previews render in sandboxed frames without same-origin access, under `connect-src 'none'`. Scripts stay blocked unless you allow them per file, and even then the network stays closed.
+## What it does not do
 
-Your catalog lives in `~/Library/Application Support/AgentOutputCatalog/catalog.db`. Everything in it can be rebuilt from disk except your tags, notes, favorites, and final marks, which sweeps never overwrite.
+- **Write to your sources.** output-mesh only reads session folders, logs, and repositories. It opens Aside's `state.db` in read-only mode.
+- **Copy your files.** The index points to the original files. Claude Desktop is the only exception: its cache entries are not files, so output-mesh keeps a copy in its own catalog folder.
+- **Listen on the network.** The server listens only on `127.0.0.1`.
+- **Let agent HTML send requests.** Previews show in sandboxed frames with no same-origin access, under `connect-src 'none'`. Scripts stay blocked until you allow them for a file. The network stays closed for scripts that you allow. One exception: a draw.io preview can load the shape images that the diagram file links to.
+
+Your catalog is in `~/Library/Application Support/AgentOutputCatalog/catalog.db`. output-mesh can rebuild all of it from disk, except your tags, notes, favorites, and final marks. Collection never overwrites those four.
 
 ## Notes
 
 - Spreadsheet text extraction uses the system `unzip`.
-- Importing from `~/Downloads`, `~/Desktop`, or `~/Documents` needs Full Disk Access for the `bun` binary once.
-- Files an agent writes through the shell leave no path in its log. Documents are still found by watching the repository, but they carry no session; source code written that way is not collected.
-- Spreadsheet previews show values only (first 200 rows and 30 columns per sheet): no formatting, merged cells, or charts.
-- PDF previews work; PDF text search does not yet. Images are not OCR'd.
+- To import from `~/Downloads`, `~/Desktop`, or `~/Documents`, give Full Disk Access to the `bun` binary once.
+- If an agent writes a file with a shell command, its log does not record the path. The repository watch still finds documents, but they have no session. output-mesh does not collect source code that an agent wrote this way.
+- Spreadsheet previews show only the values: the first 200 rows and 30 columns of each sheet. They do not show formats, merged cells, or charts.
+- PDF previews work, but PDF text search does not work yet. output-mesh does not read text in images (OCR).
 
 ## Development
 
 ```bash
-bun test      # test suite
-make check    # lint + tests
+bun test      # tests
+make check    # lint and tests
 ```
 
-Design notes live in [DESIGN.md](./DESIGN.md), and the reasoning behind the data model in [CLAUDE.md](./CLAUDE.md).
+Design notes are in [DESIGN.md](./DESIGN.md). The reasons for the data model are in [CLAUDE.md](./CLAUDE.md).
 
 ## License
 
