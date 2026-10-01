@@ -38,10 +38,12 @@
         <span data-i18n="filters.label">필터</span>
       </button>
       <span id="active-filters" class="active-filters"></span>
+      <button id="temporary-toggle" type="button" class="temporary-toggle" aria-pressed="false" hidden></button>
     </div>
     <div id="facets" class="facets" popover role="dialog" data-i18n-attr="aria-label:filters.label"></div>
     <div class="explorer-head">
       <span id="summary"></span>
+      <div id="thumb-size" class="segmented thumb-size" role="radiogroup" hidden></div>
       <label class="group-by"><span data-i18n="groupBy.label">묶기</span>
         <select id="group-by" data-i18n-attr="aria-label:groupBy.aria"></select>
       </label>
