@@ -10,31 +10,13 @@ const UUID = '123e4567-e89b-12d3-a456-426614174000';
 const V7_UUID = '019eb385-b176-77f2-b0e6-05460e2ed404';
 const encoder = new TextEncoder();
 const envelope = (url, body, headers = {}) => encoder.encode(JSON.stringify({ url, body, headers }));
-function simpleCache(url, body, encoding) {
-  const key = '1/0/' + url;
-  const compressed = encoding === 'gzip' ? gzipSync(body) : encoding === 'br' ? brotliCompressSync(body) : body;
-  const nul = String.fromCharCode(0);
-  const response = encoder.encode('HTTP/1.1 200' + nul + 'content-type:text/html' + nul + (encoding ? 'content-encoding:' + encoding + nul : '') + nul);
-  const keyBytes = encoder.encode(key);
-  const bytes = new Uint8Array(24 + keyBytes.length + response.length + compressed.length);
-  new DataView(bytes.buffer).setUint32(12, keyBytes.length, true);
-  bytes.set(keyBytes, 24); bytes.set(response, 24 + keyBytes.length); bytes.set(compressed, 24 + keyBytes.length + response.length);
-  return bytes;
-}
-
-function embeddedGzipCache(url, body) {
-  const keyBytes = encoder.encode('1/0/' + url);
-  const compressed = gzipSync(body);
-  const bytes = new Uint8Array(24 + keyBytes.length + compressed.length);
-  new DataView(bytes.buffer).setUint32(12, keyBytes.length, true);
-  bytes.set(keyBytes, 24);
-  bytes.set(compressed, 24 + keyBytes.length);
-  return bytes;
-}
+// 실제 Simple Cache 엔트리처럼 본문 뒤에 EOF 와 HTTP 헤더를 둔다.
+const simpleCache = (url, body, encoding) => cacheEntry(url, encoding === 'gzip' ? gzipSync(body) : encoding === 'br' ? brotliCompressSync(body) : body, { 'content-type': 'text/html', ...(encoding ? { 'content-encoding': encoding } : {}) });
+const embeddedGzipCache = (url, body) => cacheEntry(url, gzipSync(body), { 'content-encoding': 'gzip' });
 
 const SIMPLE_EOF = Buffer.from('d8410d97456ffaf4', 'hex');
-function cacheEntry(url, body, headers = {}, status = 200) {
-  const key = encoder.encode('1/0/' + url);
+function cacheEntry(url, body, headers = {}, status = 200, keyPrefix = '1/0/') {
+  const key = encoder.encode(keyPrefix + url);
   const head = Buffer.alloc(24); head.writeUInt32LE(key.length, 12);
   const http = encoder.encode(['HTTP/1.1 ' + status, ...Object.entries(headers).map(([name, value]) => name + ':' + value)].join('\0') + '\0\0');
   return Buffer.concat([head, key, Buffer.from(body), SIMPLE_EOF, Buffer.alloc(16), http, SIMPLE_EOF, Buffer.alloc(16)]);
@@ -84,9 +66,9 @@ describe('Claude Desktop local cache reader', () => {
     const embedded = parseClaudeCacheEntry(embeddedGzipCache('https://' + UUID + '.frame.claudeusercontent.com/_f/11/', encoder.encode('<!doctype html><html><title>Embedded</title><body>safe</body></html>')));
     expect(embedded).toMatchObject({ kind: 'frame', uuid: UUID });
     expect(parseClaudeCacheEntry(embeddedGzipCache('https://' + V7_UUID + '.frame.claudeusercontent.com/_f/12/', encoder.encode('<!doctype html><html><body>v7</body></html>')))).toMatchObject({ kind: 'frame', uuid: V7_UUID });
-    const oversizedGzip = embeddedGzipCache('https://' + UUID + '.frame.claudeusercontent.com/_f/13/', html);
-    new DataView(oversizedGzip.buffer).setUint32(oversizedGzip.length - 4, 101, true);
-    expect(parseClaudeCacheEntry(oversizedGzip, { maxBodyBytes: 100 })).toBeNull();
+    const declaredLarge = gzipSync(html);
+    new DataView(declaredLarge.buffer, declaredLarge.byteOffset).setUint32(declaredLarge.length - 4, 101, true);
+    expect(parseClaudeCacheEntry(cacheEntry('https://' + UUID + '.frame.claudeusercontent.com/_f/13/', declaredLarge, { 'content-encoding': 'gzip' }), { maxBodyBytes: 100 })).toBeNull();
   });
 
   test('correlates newest complete version and materializes one UUID file', async () => {
@@ -171,6 +153,7 @@ describe('Claude Desktop local cache reader', () => {
     const widget = readFileSync(join(output, CONV, 'widgets', 'Flow A B.html'), 'utf8');
     expect(widget).toContain('<title>Flow: A/B</title>');
     expect(widget).toContain('<svg><text>flow</text></svg>');
+    expect(widget).toContain('.sr-only {');
     expect(store.db.query('SELECT DISTINCT collector, session_ref, session_title FROM artifact_origins').all()).toEqual([{ collector: 'claude-app', session_ref: CONV, session_title: 'Weekly plan' }]);
     expect(store.getState('claude.last_sweep_code')).toBe('ok');
   });
@@ -200,6 +183,26 @@ describe('Claude Desktop local cache reader', () => {
     const stats = await new ClaudeDesktopReader({ cacheDataRoot: cache, outputDir: output }).sweep(store);
     expect(stats.kinds).toEqual({ file: 1, widget: 1 });
     expect(readFileSync(join(output, CONV, 'plan.md'), 'utf8')).toBe('# Plan\nnew line\n');
+  });
+
+  test('reads entries whose cache key is partitioned by site', async () => {
+    const cache = join(dir, 'Cache_Data'); const output = join(dir, 'managed'); mkdirSync(cache);
+    writeFileSync(join(cache, 'conversation'), cacheEntry(conversationUrl('strong'), JSON.stringify(conversation('2026-09-30T10:00:00Z', '# Plan\nold line\n')), {}, 200, '1/0/_dk_https://claude.ai https://claude.ai '));
+    expect((await new ClaudeDesktopReader({ cacheDataRoot: cache, outputDir: output }).sweep(store)).kinds).toEqual({ file: 1, widget: 1 });
+  });
+
+  test('keeps one copy when two outputs differ only in case', async () => {
+    const cache = join(dir, 'Cache_Data'); const output = join(dir, 'managed'); mkdirSync(cache);
+    const twoCases = { uuid: CONV, name: 'Cases', updated_at: '2026-09-30T10:00:00Z', current_leaf_message_uuid: 'm2', chat_messages: [
+      message('m1', '00000000-0000-4000-8000-000000000000', '2026-09-30T09:00:00Z', [tool('create_file', { path: '/mnt/user-data/outputs/Plan.md', file_text: 'upper' })]),
+      message('m2', 'm1', '2026-09-30T09:10:00Z', [tool('create_file', { path: '/mnt/user-data/outputs/plan.md', file_text: 'lower' })]),
+    ] };
+    writeFileSync(join(cache, 'conversation'), cacheEntry(conversationUrl('strong'), JSON.stringify(twoCases)));
+    const reader = new ClaudeDesktopReader({ cacheDataRoot: cache, outputDir: output });
+    expect((await reader.sweep(store)).inserted).toBe(1);
+    expect(listFiles(output)).toEqual([CONV + '/plan.md']);
+    expect(readFileSync(join(output, CONV, 'plan.md'), 'utf8')).toBe('lower');
+    expect(await reader.sweep(store)).toMatchObject({ inserted: 0, updated: 0, unchanged: 1 });
   });
 
   test('ignores frame subresources, cached 404s, and finds the metadata uuid behind a named identifier', async () => {
