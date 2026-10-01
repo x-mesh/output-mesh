@@ -132,6 +132,12 @@ describe('워처와 변경 목록', () => {
     expect(swept).toBe(false);
   });
 
+  test('Claude Desktop cache 폴더는 감시하지 않는다', () => {
+    const watcher = new Watcher(store, [], { useFsWatch: false, withSessionLogs: true, home: dir });
+    expect(watcher.watchRoots().length).toBeGreaterThan(0);
+    expect(watcher.watchRoots()).not.toContain(watcher.claudeReader.cacheDataRoot);
+  });
+
   test('빈 카탈로그로 시작하면 첫 수집을 조용히 한다', async () => {
     const watcher = new Watcher(store, [], { useFsWatch: false, withSessionLogs: false });
     let options;
