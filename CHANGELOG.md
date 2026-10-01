@@ -8,6 +8,13 @@ lives in `package.json`; `output-mesh --version` and the explorer footer show it
 
 ## [Unreleased]
 
+### Added
+
+- **collect:** read Claude Desktop artifacts from its local HTTP cache. output-mesh keeps a local copy of each complete artifact HTML and never calls Claude APIs
+- **collect:** collect files that Claude Desktop chats wrote, downloaded chat files, and chat widgets from the cached conversations
+- **collect:** stop watching the Claude Desktop cache folder. The periodic sweep picks up its changes within 30 seconds
+- **preview:** give Claude Desktop widgets a minimal style, so hidden headings stay hidden and diagram boxes stay readable
+
 ## [0.6.0] - 2026-09-21
 
 ### Added
