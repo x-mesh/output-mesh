@@ -94,7 +94,7 @@ Gemini collection reads only local data from Antigravity, Antigravity CLI, and A
 
 Some lines in Antigravity transcripts are not valid JSON. output-mesh skips each of these lines and records one warning for it. A warning is not a collection error.
 
-output-mesh counts a git worktree as part of its main repository. The tree shows each worktree as a `⑂ name` group below that repository. If an agent worked in a repository, output-mesh also watches all worktrees of that repository. When it reads a worktree for the first time, it collects only the documents that changed after git created the worktree. The other files are copies from the checkout. From the temporary session folders of Claude Code (`/private/tmp/claude-*/`), output-mesh collects only images, for example screenshots that an agent took with a script. Other files there are work notes and logs, so output-mesh does not collect them. A scratch image shows a "temporary" mark next to its location. output-mesh does not copy these images. When Claude Code or a restart deletes the folder, the images leave the library. The "Recent changes" feed shows one line for a set of images from one session.
+output-mesh counts a git worktree as part of its main repository. The tree shows each worktree as a `⑂ name` group below that repository. If an agent worked in a repository, output-mesh also watches all worktrees of that repository. When it reads a worktree for the first time, it collects only the documents that changed after git created the worktree. The other files are copies from the checkout. From the temporary session folders of Claude Code (`/private/tmp/claude-*/`), output-mesh collects only images, for example screenshots that an agent took with a script. Other files there are work notes and logs, so output-mesh does not collect them. A scratch image shows a "temporary" mark next to its location. output-mesh does not copy these images. When Claude Code or a restart deletes the folder, the images leave the library. The "Recent changes" feed shows one line for a set of images from one session. By default, output-mesh hides these images. To show them in the list, the feed, and Activity, turn on **Show temporary images** in the filter panel. The overview header shows how many images are hidden, and a click on that count also shows them.
 
 ## How to use it
 
@@ -114,7 +114,7 @@ If you type a search term, the tree changes to a flat list in relevance order. E
 
 ### Overview (right, no file selected)
 
-The overview is a grid of widgets. By default, it shows Recent changes, Final, Temporary images, the activity chart, and the breakdowns by kind, agent, and workspace. Temporary images shows small previews of the scratch-folder images, grouped by session. You can also turn on Recent tasks, Collection status, Favorites, and Tags.
+The overview is a grid of widgets. By default, it shows Recent changes, Final, the activity chart, and the breakdowns by kind, agent, and workspace. If you show temporary images, a Temporary images widget also shows small previews of them, grouped by session. You can also turn on Recent tasks, Collection status, Favorites, and Tags.
 
 - To move a widget, drag its handle. To change its size, drag its bottom-right corner.
 - Click **Layout** to turn widgets on or off, move them, or restore the default layout. This panel also works with the keyboard.
@@ -131,7 +131,7 @@ The inspector lists each session that changed the file. It also shows tags, note
 
 ### Activity
 
-The Activity view is a live timeline of agent sessions and the files that each session wrote. Each session shows its scratch-folder images apart from its other files, as small previews with a "temporary" mark. If you do not select a file, the timeline uses the full width. If you select a file, the timeline moves to the left column and the file opens on the right.
+The Activity view is a live timeline of agent sessions and the files that each session wrote. If you show temporary images, each session shows its scratch-folder images apart from its other files, as small previews with a "temporary" mark. If you do not select a file, the timeline uses the full width. If you select a file, the timeline moves to the left column and the file opens on the right.
 
 ### Collection errors
 
