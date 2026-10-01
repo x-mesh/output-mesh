@@ -92,7 +92,9 @@ describe('Gemini Antigravity reader', () => {
     writeFileSync(log, event);
     expect((await reader.scan()).records.map((record) => record.path)).toEqual([target]);
     writeFileSync(log, 'broken\n');
-    expect((await reader.scan()).stats.errors).toBe(1);
+    const broken = await reader.scan();
+    expect(broken.stats).toMatchObject({ errors: 0, invalidLines: 1 });
+    expect(broken.invalid).toEqual([{ path: log, line: 1, reason: 'not-json' }]);
   });
 
   test('keeps discovered writes after the cursor reaches EOF', async () => {
@@ -113,8 +115,34 @@ describe('Gemini Antigravity reader', () => {
     const log = join(sessionDir, '.system_generated', 'logs', 'transcript_full.jsonl');
     writeFileSync(log, 'x'.repeat(2 * 1024 * 1024));
     const reader = new GeminiReader({ roots: [root] });
-    expect((await reader.scan()).stats.errors).toBe(1);
+    const first = await reader.scan();
+    expect(first.stats.errors).toBe(0);
+    expect(first.invalid).toEqual([{ path: log, line: 1, reason: 'too-long' }]);
     expect((await reader.scan()).stats.bytes).toBe(0);
+  });
+
+  test('skips a broken line once, keeps the other records, and warns instead of failing', async () => {
+    const { root, sessionDir } = session();
+    const target = join(dir, 'kept.md'); writeFileSync(target, '# kept');
+    const log = join(sessionDir, '.system_generated', 'logs', 'transcript_full.jsonl');
+    // 실제 트랜스크립트에서 본 모양: 앞 줄은 온전한 기록이고, 다음 줄이 문장 한가운데에서 시작한다.
+    const body = line({ type: 'USER_INPUT', content: '작업' })
+      + 'call and its implications for lifetimes"}\n'
+      + line({ tool_calls: [{ name: 'write_to_file', args: { TargetFile: target } }] });
+    writeFileSync(log, body);
+    const store = new CatalogStore(join(dir, 'catalog.db'));
+    try {
+      const reader = new GeminiReader({ roots: [root] });
+      expect(await sweepGemini(store, reader)).toMatchObject({ inserted: 1, errors: 0, invalidLines: 1 });
+      // Antigravity 가 파일을 새로 쓰면 처음부터 다시 읽는다. 같은 줄을 다시 알리지 않는다.
+      writeFileSync(log, '');
+      await reader.scan();
+      writeFileSync(log, body);
+      expect(await sweepGemini(store, reader)).toMatchObject({ errors: 0, invalidLines: 1 });
+      expect(store.db.query("SELECT level, code, path, message FROM ingest_events WHERE code LIKE 'gemini%'").all())
+        .toEqual([{ level: 'warn', code: 'gemini_line_skipped', path: log, message: 'Line 2 is not a transcript record (not-json); skipped.' }]);
+      expect(store.getState('gemini.last_sweep_code')).toBe('ok');
+    } finally { store.close(); }
   });
 
   test('ignores backup roots and yields during large scans', async () => {
