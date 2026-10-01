@@ -55,6 +55,7 @@ describe('스피너', () => {
     expect(line).toContain('1.0 GB / 3.0 GB');
     expect(line).toContain('412/1,256');
     expect(step).toBe('Reading Codex logs (1,256 files, 3.0 GB)');
+    expect(collectProgressText({ step: 'files', source: 'gemini', done: 2, total: 3 })[0]).toContain('Gemini');
   });
 });
 
