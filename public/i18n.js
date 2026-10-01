@@ -95,6 +95,8 @@
       'stat.activeTitle': ({ n }) => `최근 ${n}시간 동안 파일을 쓴 대화. 누르면 활동 보기`,
 
       'where.worktree': ({ name }) => `git worktree: ${name}`,
+      'where.scratch': '임시', 'where.scratchTitle': 'Claude Code 세션의 임시 작업 폴더입니다. 세션을 정리하거나 재부팅하면 지워질 수 있습니다.',
+      'changes.scratchImages': ({ n }) => `임시 이미지 ${num(n)}개`,
       'tree.elsewhere': '저장소 밖', 'tree.untitledTask': '제목 없는 작업', 'agent.unknown': '에이전트 정보 없음',
       'date.today': '오늘', 'date.yesterday': '어제', 'date.week': '지난 7일', 'date.month': '지난 30일',
       'tree.noMatch': '맞는 산출물이 없습니다.', 'tree.empty': '아직 수집된 산출물이 없습니다.',
@@ -273,6 +275,8 @@
       'stat.activeTitle': ({ n }) => `Conversations that wrote files in the last ${n} hours. Click for Activity`,
 
       'where.worktree': ({ name }) => `git worktree: ${name}`,
+      'where.scratch': 'temporary', 'where.scratchTitle': 'Temporary work folder of a Claude Code session. It can be deleted when the session is cleaned up or the machine restarts.',
+      'changes.scratchImages': ({ n }) => count(n, 'temporary image', 'temporary images'),
       'tree.elsewhere': 'Outside repositories', 'tree.untitledTask': 'Untitled task', 'agent.unknown': 'Unknown agent',
       'date.today': 'Today', 'date.yesterday': 'Yesterday', 'date.week': 'Last 7 days', 'date.month': 'Last 30 days',
       'tree.noMatch': 'Nothing matches.', 'tree.empty': 'Nothing collected yet.',
