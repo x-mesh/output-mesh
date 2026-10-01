@@ -441,6 +441,8 @@ kbd {
 .logo[data-logo="codex"] { -webkit-mask-image: url("/vendor/agent-logos/codex.svg"); mask-image: url("/vendor/agent-logos/codex.svg"); }
 .logo[data-logo="cursor"] { -webkit-mask-image: url("/vendor/agent-logos/cursor.svg"); mask-image: url("/vendor/agent-logos/cursor.svg"); }
 .logo[data-logo="gemini"] { -webkit-mask-image: url("/vendor/agent-logos/gemini.svg"); mask-image: url("/vendor/agent-logos/gemini.svg"); }
+/* Aside 는 회사 로고(200px JPEG, 흰 바탕)에서 기호만 잘라 밝기 → 투명도 마스크(64px PNG)로 바꿨다. 다른 로고처럼 글자색을 따른다. */
+.logo[data-logo="aside"] { -webkit-mask-image: url("/vendor/agent-logos/aside.png"); mask-image: url("/vendor/agent-logos/aside.png"); }
 
 /* 파일은 폴더 화살표 자리만큼 들여 아이콘이 폴더 아이콘과 줄을 맞춘다. */
 .tree-item.file { align-items: flex-start; padding-top: 5px; padding-bottom: 5px; padding-left: calc(var(--space-1) + 21px + var(--level) * var(--indent) - var(--indent)); }
