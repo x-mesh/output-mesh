@@ -2421,17 +2421,15 @@ function statusPanel(status) {
     [t('status.artifacts'), num(counts.artifacts ?? 0)],
     [t('status.origins'), num(counts.origins ?? 0)],
   ];
-  // "최근"은 상단 표시와 같은 뜻이어야 한다. 서버가 한 시간으로 자른 recentError 를 그대로 쓰고,
-  // 그보다 오래된 기록은 건수만 조용히 남긴다 — 두 자리가 다른 기준으로 "최근"을 말하면 못 믿는다.
-  const logged = (status.events ?? []).filter((event) => event.level === 'error').length;
+  // "최근"은 상단 표시와 같은 한 시간이다. 그보다 오래된 오류까지 세어 두면 몇 주 전 오류 때문에
+  // 지금도 실패하는 것처럼 읽혔다. 지난 오류는 수집 범위 화면의 오류 목록에서 본다.
   const recent = watcher.recentError;
   return el('section', { className: 'home-status' },
     el('h3', {}, t('home.block.status')),
     el('dl', { className: 'kv' }, ...rows.flatMap(([key, value]) => [el('dt', {}, key), el('dd', {}, value)])),
     recent
       ? el('button', { type: 'button', className: 'link danger', onclick: () => void showCoverage() }, t('live.error', { when: relativeWhen(recent.at) }))
-      : el('p', { className: 'hint' }, t('status.clean')),
-    !recent && logged > 0 && el('button', { type: 'button', className: 'link quiet-link', onclick: () => void showCoverage() }, t('status.logged', { n: logged })));
+      : el('p', { className: 'hint' }, t('status.clean')));
 }
 
 // ── 주소 ───────────────────────────────────────────────────────────────
@@ -2475,7 +2473,7 @@ async function showCoverage({ fromRoute = false } = {}) {
   markSelected(null);
   const [data, status] = await Promise.all([api('/api/coverage'), api('/api/status')]);
   // 무엇이 왜 빠졌는지에는 "읽으려다 실패했다"도 들어간다. 상단의 수집 오류 표시가 여기로 온다.
-  const errors = status.events.filter((event) => event.level === 'error');
+  const errors = status.errors;
   const errorSection = errors.length > 0 && el('section', {},
     el('h3', {}, t('coverage.errors')),
     el('ul', {}, ...errors.map((event) => el('li', {},

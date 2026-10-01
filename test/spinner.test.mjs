@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { collectProgressText, createSpinner, formatBytes } from '../lib/spinner.mjs';
+import { collectErrorsText, collectProgressText, createSpinner, formatBytes } from '../lib/spinner.mjs';
 import { CatalogStore } from '../lib/store.mjs';
 import { collectSessionLogs } from '../lib/collector.mjs';
 import { Watcher } from '../lib/watcher.mjs';
@@ -144,5 +144,39 @@ describe('닫힌 출력', () => {
     expect(() => spinner.start('Preparing to collect')).not.toThrow();
     expect(() => spinner.update('진행')).not.toThrow();
     expect(() => spinner.stop()).not.toThrow();
+  });
+});
+
+describe('시작 화면의 오류 줄', () => {
+  const NOW = 1_790_000_000;
+  const error = (ago) => ({ level: 'error', at: NOW - ago });
+
+  test('오류가 없으면 줄이 없다', () => {
+    expect(collectErrorsText([], NOW)).toBeNull();
+  });
+
+  test('이번 수집 전의 오류만 있으면 그렇다고 적고 마지막 시각을 붙인다 — 지금도 실패하는 것처럼 읽히면 안 된다', () => {
+    const text = collectErrorsText([error(30), error(1_800), error(2_040)], NOW);
+    expect(text).toMatch(/^none in this run · 3 earlier in the last hour, latest \d\d:\d\d$/);
+    expect(text.endsWith(new Date((NOW - 30) * 1000).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }))).toBe(true);
+  });
+
+  test('이번 수집에서 난 오류가 있으면 그 수만 적는다', () => {
+    expect(collectErrorsText([error(-5), error(0), error(1_800)], NOW)).toBe('2 in this run');
+  });
+
+  test('오류 수는 경고에 밀리지 않는다 — 재시작마다 같은 경고가 쌓인다', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'output-mesh-errors-'));
+    const store = new CatalogStore(join(dir, 'c.db'));
+    try {
+      store.logIngest({ code: 'sweep_failed', at: NOW - 600 });
+      for (let i = 0; i < 60; i++) store.logIngest({ level: 'warn', code: 'gemini_line_skipped', at: NOW - 60 });
+      store.logIngest({ code: 'sweep_failed', at: NOW - 7_200 });
+      expect(store.recentIngestErrors({ since: NOW - 3_600 }).map((event) => event.at)).toEqual([NOW - 600]);
+      expect(store.recentIngestErrors({ limit: 1 }).map((event) => event.at)).toEqual([NOW - 600]);
+    } finally {
+      store.close();
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
