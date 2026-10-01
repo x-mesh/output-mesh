@@ -373,6 +373,10 @@ kbd {
 .facet .n { margin-left: auto; color: var(--text-dim); font-variant-numeric: tabular-nums; font-size: var(--text-xs); }
 .facet-note { font-size: var(--text-xs); color: var(--text-dim); white-space: nowrap; }
 .facet.out-of-scope .facet-name { color: var(--text-dim); }
+/* 에이전트·앱 줄과 토큰의 로고. 토큰은 높이가 20px 이라 한 단계 작게 둔다. */
+.facet .dot { margin: 0 3px; }
+.token .logo { width: 12px; height: 12px; }
+.token .dot { width: 7px; height: 7px; margin: 0 1px; }
 
 .explorer-head {
   display: flex; align-items: center; justify-content: space-between;
