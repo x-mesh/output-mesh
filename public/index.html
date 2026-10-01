@@ -34,9 +34,10 @@
       <div id="period" class="period" role="radiogroup" aria-labelledby="period-label"></div>
     </div>
     <div id="filters" class="filters">
-      <button id="filters-button" type="button" class="filters-button" popovertarget="facets" aria-haspopup="dialog" aria-expanded="false" aria-controls="facets" data-i18n-attr="title:filters.title">
+      <button id="filters-button" type="button" class="filters-button" popovertarget="facets" aria-haspopup="dialog" aria-expanded="false" aria-controls="facets" disabled data-i18n-attr="title:filters.title">
         <span data-i18n="filters.label">필터</span>
       </button>
+      <span id="filters-loading" class="loading-inline" role="status"><span class="spinner" aria-hidden="true"></span><span data-i18n="loading.catalog">처음 수집하는 중…</span></span>
       <span id="active-filters" class="active-filters"></span>
       <button id="temporary-toggle" type="button" class="temporary-toggle" aria-pressed="false" hidden></button>
     </div>
@@ -59,7 +60,7 @@
     </footer>
   </nav>
   <div id="resizer" class="resizer" role="separator" aria-orientation="vertical" tabindex="0" data-i18n-attr="aria-label:aria.resizer"></div>
-  <section id="detail" class="content" data-i18n-attr="aria-label:aria.content"></section>
+  <section id="detail" class="content" data-i18n-attr="aria-label:aria.content"><div class="dashboard-loading" role="status"><span class="spinner" aria-hidden="true"></span><span data-i18n="loading.catalog">처음 수집하는 중…</span></div></section>
 </main>
 
 <dialog id="importer">

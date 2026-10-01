@@ -8,6 +8,12 @@ lives in `package.json`; `output-mesh --version` and the explorer footer show it
 
 ## [Unreleased]
 
+### Added
+
+- **activity:** a note above the timeline counts documents that only the library shows (found by the repository watcher or an import, so no agent session is known); clicking it opens the library filtered to those sources.
+- **ui:** the filter button and overview show a spinner until the first collection finishes, so an empty first run no longer reads as "nothing matched".
+- **make:** `make stop` and `make reset` for restarting a test catalog from scratch.
+
 ## [0.10.0] - 2026-10-01
 
 ### Added

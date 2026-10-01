@@ -317,6 +317,16 @@ kbd {
   display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-1);
   min-height: 28px; padding: 2px var(--space-2) 2px var(--space-3);
 }
+.loading-inline, .dashboard-loading {
+  display: inline-flex; align-items: center; gap: var(--space-2); color: var(--text-dim); font-size: var(--text-xs);
+}
+.spinner {
+  width: 12px; height: 12px; box-sizing: border-box; flex: 0 0 auto; border: 2px solid var(--border-strong); border-right-color: var(--accent); border-radius: 50%; animation: spinner-turn 700ms linear infinite;
+}
+.dashboard-loading { justify-content: center; width: 100%; min-height: 100%; font-size: var(--text-sm); }
+.dashboard-loading .spinner { width: 16px; height: 16px; }
+@keyframes spinner-turn { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .spinner { animation: none; border-right-color: var(--border-strong); } }
 /* 임시 이미지 스위치. 필터가 아니라 보기 설정이라 필터 줄 끝에 따로 선다. 숨긴 수를 함께 적는다. */
 .temporary-toggle {
   margin-left: auto; display: inline-flex; align-items: center; gap: 6px;
@@ -899,6 +909,8 @@ embed.preview-fill { height: 100%; }
 /* 내려 보고 있을 때 위로 들어온 새 작업. 목록 맨 위에 붙어 있다가 누르면 맨 위로 간다. */
 .activity-new { position: sticky; top: 0; z-index: 1; display: flex; justify-content: center; list-style: none; padding: var(--space-1) 0; }
 .activity-new button { min-height: 24px; font-size: var(--text-xs); border-color: var(--accent); color: var(--accent); background: var(--bg); box-shadow: 0 1px 3px rgba(0, 0, 0, .12); }
+.activity-sessionless { list-style: none; padding: var(--space-1) var(--space-3); }
+.activity-sessionless button { border: 0; background: none; padding: 0; font-size: var(--text-xs); color: var(--text-dim); text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
 /* 숨김 규칙 화면 */
 .rule-list { list-style: none; margin: var(--space-3) 0; padding: 0; display: grid; gap: 2px; }
 .rule { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-1) var(--space-2); border-bottom: 1px solid var(--border); }

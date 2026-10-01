@@ -17,6 +17,7 @@ const HOME_LIST_COUNT = 6;
 const CHANGE_PAGE_SIZE = 30;
 // 활동 보기에서 새로 들어온 카드와 그림을 강조하는 시간. 수집 알림 간격(30초)보다 짧게 둔다.
 const ACTIVITY_FRESH_MS = 8_000;
+const SESSIONLESS_COLLECTORS = ['workspace', 'import'];
 // 이만큼 내려 보고 있으면 새 카드로 화면을 밀지 않고 위에 알림만 띄운다.
 const ACTIVITY_FOLLOW_PX = 24;
 const THUMB_SIZES = ['small', 'large'];
@@ -66,6 +67,7 @@ const state = {
   hiddenChanges: {},
   period: 'all',
 };
+let catalogReady = false;
 // 선택할 때 트리를 다시 그리면 스크롤과 포커스가 튄다. 노드를 들고 있다가 속성만 바꾼다.
 // 에이전트·앱별로 묶으면 두 에이전트가 만든 파일은 두 묶음에 모두 있으므로 id 하나에 노드가 여럿이다.
 const rowNodes = new Map();
@@ -487,6 +489,14 @@ function onlyFilter(key, value) {
   applyFilters(key, on);
 }
 
+/** 세션을 모르는 문서는 활동에 없다. 라이브러리에서 그 출처(작업공간·가져오기)로 좁혀 보여 준다. */
+function showSessionlessInLibrary() {
+  state.filters = { collector: SESSIONLESS_COLLECTORS };
+  setModeState('library');
+  state.searchOpen = {};
+  void refresh();
+}
+
 function applyFilters(key, cleared) {
   // 활동 보기는 수집기·작업공간만 본다. 다른 필터를 누르면 그 필터가 듣는 화면으로 간다.
   if (!cleared && state.mode === 'activity' && !ACTIVITY_FILTERS.has(key)) setModeState('library');
@@ -614,6 +624,8 @@ async function refreshFacets() {
 }
 
 function renderFilters(data) {
+  $('filters-loading').hidden = true;
+  $('filters-button').disabled = false;
   const hidden = new Set(data.libraryHidden ?? []);
   const shorten = (path) => path.split('/').slice(-2).join('/');
   const groups = state.mode === 'activity'
@@ -1296,6 +1308,11 @@ function updateSummary() {
  */
 async function refresh({ live = false } = {}) {
   renderStats();
+  if (!catalogReady) {
+    const status = await api('/api/status').catch(() => ({ ready: true }));
+    catalogReady = status.ready;
+    if (!catalogReady) return;
+  }
   if (state.mode === 'activity') return refreshActivity({ live });
 
   // 검색 결과는 묶지 않으므로 묶기와 접기가 할 일이 없다.
@@ -1953,7 +1970,7 @@ function goHome({ fromRoute = false } = {}) {
   state.view = 'home';
   updateWide();
   // 활동 보기의 개요는 넓은 타임라인 자신이다. 가려진 본문에 개요를 그리지 않는다.
-  if (state.mode !== 'activity') void renderHome();
+  if (catalogReady && state.mode !== 'activity') void renderHome();
 }
 
 /**
@@ -2792,7 +2809,7 @@ function renderThumbSize() {
  */
 async function refreshActivity({ live = false } = {}) {
   const params = activityParams({ temporary: true });
-  const { sessions } = await api(`/api/activity?${params}`);
+  const { sessions, sessionless } = await api(`/api/activity?${params}`);
 
   const list = $('rows');
   const scope = params.toString();
@@ -2814,6 +2831,13 @@ async function refreshActivity({ live = false } = {}) {
   renderThumbSize();
   renderFollowToggle();
 
+  if (sessionless > 0) {
+    list.append(el('li', { className: 'activity-sessionless' }, el('button', {
+      type: 'button',
+      title: t('activity.sessionlessTitle'),
+      onclick: showSessionlessInLibrary,
+    }, t('activity.sessionless', { n: sessionless }))));
+  }
   if (sessions.length === 0) list.append(el('li', { className: 'empty' }, el('p', {}, t('activity.empty'))));
   const fresh = [];
   for (const session of sessions) {
@@ -3112,6 +3136,7 @@ function connectLive() {
     if ('error' in payload) collectError = payload.error;
     if (payload.type === 'failed' || payload.type === 'hello') renderCollectError();
     if (payload.type !== 'collected') return;
+    catalogReady = true;
     // 보고 있으면 세지 않는다. 피드가 이미 개요 맨 위에서 같은 것을 말한다.
     if (document.hidden) unseenChanges += payload.changes ?? 0;
     lastCollectedAt = payload.at;

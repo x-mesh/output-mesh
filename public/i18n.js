@@ -34,6 +34,7 @@
       'sweep.idle': '다시 수집',
       'sweep.running': '수집 중…',
       'aria.explorer': '탐색기',
+      'loading.filters': '필터 불러오는 중…', 'loading.dashboard': '개요 불러오는 중…', 'loading.catalog': '처음 수집하는 중…',
       'search.placeholder': '파일명 · 본문 · 작업 검색',
       'search.disabled': '활동 보기는 시간순 목록이라 검색할 수 없습니다',
       'period.label': '기간',
@@ -201,7 +202,7 @@
 
       'session.final': ({ n }) => `최종본 ${num(n)}`, 'session.subagents': ({ n }) => `서브에이전트 ${num(n)}`,
       'session.more': ({ n }) => `외 ${num(n)}개`,
-      'activity.empty': '최근 활동이 없습니다.', 'activity.summary': ({ n }) => `최근 작업 ${num(n)}건`,
+      'activity.empty': '최근 활동이 없습니다.', 'activity.sessionless': ({ n }) => `세션을 알 수 없는 문서 ${num(n)}개는 라이브러리에만 보입니다`, 'activity.sessionlessTitle': '셸이나 저장소 감시로 잡힌 문서라 어느 에이전트 세션이 썼는지 로그에 없습니다. 누르면 라이브러리에서 봅니다.', 'activity.summary': ({ n }) => `최근 작업 ${num(n)}건`,
       'live.error': ({ when }) => `수집 오류 · ${when}`, 'live.errorAck': '누르면 오류 내용을 열고 확인한 것으로 표시합니다. 그 뒤로는 새 오류가 생길 때만 다시 보입니다.',
       'coverage.errors': '최근 수집 오류',
       'live.down': '연결 끊김', 'live.up': '실시간', 'live.collected': ({ when }) => `실시간 · ${when} 수집`,
@@ -222,6 +223,7 @@
       'sweep.idle': 'Collect now',
       'sweep.running': 'Collecting…',
       'aria.explorer': 'Explorer',
+      'loading.filters': 'Loading filters…', 'loading.dashboard': 'Loading overview…', 'loading.catalog': 'Collecting your catalog for the first time…',
       'search.placeholder': 'Search names, content, tasks',
       'search.disabled': 'Activity is chronological, so search is off',
       'period.label': 'Period',
@@ -389,7 +391,7 @@
 
       'session.final': ({ n }) => `${num(n)} final`, 'session.subagents': ({ n }) => count(n, 'subagent', 'subagents'),
       'session.more': ({ n }) => `+${num(n)} more`,
-      'activity.empty': 'No recent activity.', 'activity.summary': ({ n }) => count(n, 'recent task', 'recent tasks'),
+      'activity.empty': 'No recent activity.', 'activity.sessionless': ({ n }) => `${count(n, 'document is', 'documents are')} shown only in the library, with no known session`, 'activity.sessionlessTitle': 'Found by the repository watcher or an import, so no agent session log says who wrote it. Click to see them in the library.', 'activity.summary': ({ n }) => count(n, 'recent task', 'recent tasks'),
       'live.error': ({ when }) => `Collection error · ${when}`, 'live.errorAck': 'Click to open the errors and mark them as seen. After that, only a newer error shows here again.',
       'coverage.errors': 'Recent collection errors',
       'live.down': 'Disconnected', 'live.up': 'Live', 'live.collected': ({ when }) => `Live · collected ${when}`,

@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { CatalogStore, repairCollector } from '../lib/store.mjs';
 import { ingestFile, reindexArtifact } from '../lib/collector.mjs';
-import { activity, facets, search, searchCount, timeline } from '../lib/search.mjs';
+import { activity, facets, search, searchCount, sessionlessCount, timeline } from '../lib/search.mjs';
 import { nfc } from '../lib/paths.mjs';
 
 let dir;
@@ -255,6 +255,28 @@ describe('repairCollector', () => {
     ['aside', 'claude-code', 'aside'],
     ['import', null, 'import'],
   ])('%s + %s -> %s', (collector, provider, want) => expect(repairCollector(collector, provider)).toBe(want));
+});
+
+describe('세션을 모르는 문서', () => {
+  const doc = (name) => store.insertArtifact({ pathKey: `/x/${name}`, absPath: `/x/${name}`, fileName: name, ext: 'md', kind: 'document', sizeBytes: 1, contentHash: name, fileId: null, mtime: 1 });
+
+  test('세션 출처가 없고 작업공간·가져오기 출처만 있는 문서만 센다', () => {
+    const onlyWorkspace = doc('a.md');
+    store.recordOrigin(onlyWorkspace, { collector: 'workspace', sessionRef: '' });
+    const imported = doc('b.md');
+    store.recordOrigin(imported, { collector: 'import', sessionRef: '' });
+    const alsoAgent = doc('c.md');
+    store.recordOrigin(alsoAgent, { collector: 'workspace', sessionRef: '' });
+    store.recordOrigin(alsoAgent, claude('cc-1'));
+
+    expect(sessionlessCount(store)).toBe(2);
+  });
+
+  test('활동 카드로 보이는 파일은 세지 않아 둘의 합이 라이브러리와 맞는다', () => {
+    store.recordOrigin(doc('a.md'), claude('cc-1'));
+    expect(sessionlessCount(store)).toBe(0);
+    expect(activity(store)).toHaveLength(1);
+  });
 });
 
 describe('활동 시각', () => {
