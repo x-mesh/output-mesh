@@ -59,6 +59,7 @@ bun bin/output-mesh.mjs
 | Codex | `~/.codex/sessions/**/rollout-*.jsonl` | 세션 로그의 `apply_patch` 마커에서 쓴 경로 |
 | Claude Code | `~/.claude/projects/**/*.jsonl` | `Write` / `Edit` 도구 호출의 `file_path` |
 | Claude Desktop | `~/Library/Application Support/Claude/Cache/Cache_Data/` | 로컬 캐시에 남은 아티팩트 HTML, 채팅이 쓴 파일, 채팅 위젯 |
+| Gemini Antigravity | `~/.gemini/{antigravity,antigravity-cli,antigravity-ide}/brain/` | 로컬 세션 산출물과 쓰기 도구가 기록한 파일 경로 |
 | Cursor | `~/Library/Application Support/Cursor/.../state.vscdb` | composer 가 고치거나 새로 만든 파일 (읽기 전용으로 연다) |
 | 내 저장소 | 위의 에이전트가 일한 저장소 | 최근 7일 안에 바뀐 문서, 그 뒤로는 폴더 감시로 새로 생기거나 바뀐 문서 |
 | 그 밖의 것 | 직접 고른 폴더나 파일 | `output-mesh import <경로>` |
@@ -74,6 +75,8 @@ Claude Desktop 수집은 로컬 Chromium HTTP 캐시만 읽는다. Claude 의 pr
 - 채팅 위젯. HTML 페이지로 저장한다.
 
 캐시에는 Claude Desktop 에서 연 대화만 남는다. 캐시에서 밀려나도 마지막으로 모은 사본은 남는다. 캐시 형식이 바뀌면 이 출처가 멈출 수 있다.
+
+Gemini 수집은 로컬 Antigravity, Antigravity CLI, Antigravity IDE 데이터만 읽는다. 세션의 원본 산출물과 `write_to_file` 또는 `replace_file_content`가 가리키는 현재 파일을 수집한다. scratch 파일, 업로드, 내부 생성물, metadata, `.resolved` 파생본, backup, Gemini 웹 Canvas, 다운로드 이미지는 제외한다. Gemini 계정 파일을 읽거나 Gemini 서비스에 요청하지 않는다. 저장소 파일이 지워지면 새로 수집하지 않는다.
 
 git worktree 는 본 저장소로 센다. 트리에서는 그 저장소 아래에 `⑂ 이름` 묶음으로 나온다. Claude Code 의 세션 임시 폴더(`/private/tmp/claude-*/`)는 모으지 않는다.
 
