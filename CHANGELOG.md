@@ -8,6 +8,10 @@ lives in `package.json`; `output-mesh --version` and the explorer footer show it
 
 ## [Unreleased]
 
+### Added
+
+- **ui:** hide rules hide folders such as `vendor` from the view without changing collection. Four default rules are on, `.xm` and `.claude` are listed but off, and each rule shows how many files it hides. Add, turn off, or delete rules on the rules screen, or hide one folder from the right-click menu. Favorites, tags, notes, final files, and deliverables are never hidden. The startup screen says what is hidden, and `output-mesh rules` lists the rules
+
 ## [0.9.0] - 2026-10-01
 
 ### Added
