@@ -125,6 +125,11 @@ describe('워처와 변경 목록', () => {
     expect(watcher.claudeReader.outputDir.startsWith(dir)).toBe(true);
   });
 
+  test('home 을 주입하면 Claude Code 임시 폴더를 읽지 않는다 — 그 폴더는 home 밖이다', () => {
+    expect(new Watcher(store, [], { useFsWatch: false, withSessionLogs: true, home: dir }).scratchRoot).toBeNull();
+    expect(new Watcher(store, [], { useFsWatch: false, withSessionLogs: true, home: dir, scratchRoot: join(dir, 'tmp') }).scratchRoot).toBe(join(dir, 'tmp'));
+  });
+
   test('주입한 home 밖의 Gemini 데이터를 읽지 않는다', () => {
     const watcher = new Watcher(store, [], { useFsWatch: false, withSessionLogs: false, home: dir });
     expect(watcher.geminiReader.roots.every((root) => root.startsWith(dir))).toBe(true);
