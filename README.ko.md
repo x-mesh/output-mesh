@@ -38,7 +38,7 @@ bunx output-mesh
 
 그다음 http://127.0.0.1:19843 을 연다.
 
-Bun이 내려받은 패키지를 보관하므로 다음부터는 바로 시작한다. 새 릴리스를 받으려면 `bunx output-mesh@latest`를, `main`의 최신 커밋을 받으려면 `bunx github:x-mesh/output-mesh`를 실행한다.
+Bun이 내려받은 패키지를 보관하므로 다음부터는 바로 시작한다. 새 버전이 있으면 시작 화면에 `Update` 줄이 나온다. 확인하려고 npm 레지스트리에 요청을 한 번 보내며, 사용자에 관한 정보는 싣지 않는다. 끄려면 `OUTPUT_MESH_NO_UPDATE_CHECK=1` 을 설정한다. 새 릴리스를 받으려면 `bunx output-mesh@latest`를, `main`의 최신 커밋을 받으려면 `bunx github:x-mesh/output-mesh`를 실행한다.
 
 처음 실행하면 에이전트 로그를 모두 한 번 읽으면서 진행 상황을 보여 준다. 다음부터는 바뀐 부분만 읽는다.
 

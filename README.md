@@ -38,7 +38,7 @@ bunx output-mesh
 
 Then open http://127.0.0.1:19843.
 
-Bun keeps the downloaded package, so the next start is fast. To get a new release, run `bunx output-mesh@latest`. To get the latest commit on `main`, run `bunx github:x-mesh/output-mesh`.
+Bun keeps the downloaded package, so the next start is fast. To get a new release, run `bunx output-mesh@latest`. When a newer version exists, the startup screen shows an `Update` line. To check for it, output-mesh sends one request to the npm registry and sends no data about you. To turn this off, set `OUTPUT_MESH_NO_UPDATE_CHECK=1`. To get the latest commit on `main`, run `bunx github:x-mesh/output-mesh`.
 
 The first run reads all agent logs once and shows the progress. Later starts read only the changes.
 
