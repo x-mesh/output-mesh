@@ -881,9 +881,19 @@ embed.preview-fill { height: 100%; }
 .session-file[aria-selected="true"] { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
 .session-file.final { border-color: var(--final); }
 .session-more { font-size: var(--text-xs); color: var(--text-dim); align-self: center; }
+/* 세션 작업 폴더의 이미지. 파일 이름 대신 작은 그림으로 따로 묶는다. 칸은 고정이라 그림이 늦게 와도 줄이 밀리지 않는다. */
+.session-scratch { margin-top: var(--space-2); display: grid; gap: var(--space-1); }
+.session-scratch-head { display: flex; align-items: center; gap: 6px; font-size: var(--text-xs); color: var(--text-dim); }
+.scratch-thumbs { display: flex; flex-wrap: wrap; gap: var(--space-1); align-items: center; }
+.scratch-thumb { width: 72px; height: 48px; min-height: 0; padding: 0; overflow: hidden; border-radius: var(--radius-sm); background: var(--bg-track); }
+.scratch-thumb img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.scratch-thumb:hover { border-color: var(--accent); }
+.scratch-thumb[aria-selected="true"] { border-color: var(--accent); outline: 2px solid var(--accent); outline-offset: 0; }
 /* 넓을 때는 누가 · 언제 · 어디서를 왼쪽 기둥에, 무엇을 시켰고 무엇을 썼는지를 오른쪽에 둔다. */
 .layout[data-wide] .session { display: grid; grid-template-columns: 240px minmax(0, 1fr); column-gap: var(--space-5); align-items: start; padding: var(--space-3) var(--space-2); }
-.layout[data-wide] .session-head { grid-row: 1 / span 2; }
+.layout[data-wide] .session-head { grid-row: 1 / span 3; }
+/* 파일과 임시 이미지는 둘 다 "무엇을 썼나"라 오른쪽 칸이다. 자리를 정하지 않으면 셋째 줄의 왼쪽 기둥으로 간다. */
+.layout[data-wide] :is(.session-files, .session-scratch) { grid-column: 2; }
 .layout[data-wide] .session-head .where-dir { max-width: none; }
 .layout[data-wide] .session-title { margin-top: 0; font-size: var(--text-md); }
 .tree[role="list"] .empty { padding: var(--space-6) var(--space-4); text-align: center; color: var(--text-dim); }
