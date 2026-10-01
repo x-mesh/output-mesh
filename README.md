@@ -114,7 +114,7 @@ If you type a search term, the tree changes to a flat list in relevance order. E
 
 ### Overview (right, no file selected)
 
-The overview is a grid of widgets. By default, it shows Recent changes, Final, the activity chart, and the breakdowns by kind, agent, and workspace. You can also turn on Recent tasks, Collection status, Favorites, and Tags.
+The overview is a grid of widgets. By default, it shows Recent changes, Final, Temporary images, the activity chart, and the breakdowns by kind, agent, and workspace. Temporary images shows small previews of the scratch-folder images, grouped by session. You can also turn on Recent tasks, Collection status, Favorites, and Tags.
 
 - To move a widget, drag its handle. To change its size, drag its bottom-right corner.
 - Click **Layout** to turn widgets on or off, move them, or restore the default layout. This panel also works with the keyboard.
@@ -131,7 +131,7 @@ The inspector lists each session that changed the file. It also shows tags, note
 
 ### Activity
 
-The Activity view is a live timeline of agent sessions and the files that each session wrote. If you do not select a file, the timeline uses the full width. If you select a file, the timeline moves to the left column and the file opens on the right.
+The Activity view is a live timeline of agent sessions and the files that each session wrote. Each session shows its scratch-folder images apart from its other files, as small previews with a "temporary" mark. If you do not select a file, the timeline uses the full width. If you select a file, the timeline moves to the left column and the file opens on the right.
 
 ### Collection errors
 
