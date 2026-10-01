@@ -389,6 +389,15 @@ group('활동 그래프 — 칸마다 에이전트별로 센다', () => {
     expect(timeline(store, '', { view: 'library' }, 'all', now).buckets).toHaveLength(MAX_TIMELINE_WEEKS);
   });
 
+  test('에이전트를 여럿 고르면 그 에이전트들의 기록만 센다', async () => {
+    const { timeline } = await import('../lib/search.mjs');
+    made('a.md', 'md', [{ collector: 'codex', sessionRef: 's1', provider: 'openai-codex', createdAt: at(2026, 8, 18) }]);
+    made('b.md', 'md', [{ collector: 'claude-code', sessionRef: 's2', provider: 'claude-code', createdAt: at(2026, 8, 18) }]);
+    made('c.md', 'md', [{ collector: 'cursor', sessionRef: 's3', provider: 'cursor', createdAt: at(2026, 8, 18) }]);
+    const result = timeline(store, '', { view: 'library', provider: ['openai-codex', 'claude-code'] }, '7d', now);
+    expect(result.buckets.at(-1).counts).toEqual({ 'openai-codex': 1, 'claude-code': 1 });
+  });
+
   test('라이브러리 규칙을 따른다 — 목록에 없는 코드는 세지 않고, 에이전트가 없으면 모름', async () => {
     const { timeline } = await import('../lib/search.mjs');
     made('main.rs', 'rs', [{ collector: 'codex', sessionRef: 's1', provider: 'openai-codex', createdAt: at(2026, 8, 18) }]);
