@@ -119,6 +119,12 @@ describe('찾아 둔 파일 다시 확인', () => {
 });
 
 describe('워처와 변경 목록', () => {
+  test('주입한 home 밖의 Claude Desktop cache를 읽지 않는다', () => {
+    const watcher = new Watcher(store, [], { useFsWatch: false, withSessionLogs: false, home: dir });
+    expect(watcher.claudeReader.cacheDataRoot.startsWith(dir)).toBe(true);
+    expect(watcher.claudeReader.outputDir.startsWith(dir)).toBe(true);
+  });
+
   test('빈 카탈로그로 시작하면 첫 수집을 조용히 한다', async () => {
     const watcher = new Watcher(store, [], { useFsWatch: false, withSessionLogs: false });
     let options;
