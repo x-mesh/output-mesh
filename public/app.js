@@ -1917,10 +1917,11 @@ async function renderHome() {
   // 켜 둔 위젯이 쓰는 것만 받는다. 열 개를 다 받으면 안 보이는 위젯 때문에 매 수집마다 요청이 는다.
   const on = new Set(homeBlocks().filter((block) => block.on).map((block) => block.id));
   const fetchIf = (want, path) => (want ? api(path).catch(() => null) : Promise.resolve(null));
-  const [timeline, sessions, status] = await Promise.all([
+  const [timeline, sessions, status, scratch] = await Promise.all([
     fetchIf(on.has('activity'), `/api/timeline?${searchParams()}`),
     fetchIf(on.has('sessions'), `/api/activity?${activityParams()}`).then((got) => got?.sessions ?? null),
     fetchIf(on.has('status'), '/api/status'),
+    fetchIf(on.has('scratch'), `/api/activity?${activityParams()}&scratch=1`).then((got) => got?.sessions ?? null),
   ]);
   if (token !== homeToken || state.view !== 'home') return;
 
@@ -1934,7 +1935,7 @@ async function renderHome() {
     current.replaceChild(dashboard().querySelector('.dash-head'), current.querySelector('.dash-head'));
   }
   const dash = $('detail').querySelector('.dash');
-  fillBlocks({ timeline, sessions, status }, state.rows.filter((r) => r.state === 'final'));
+  fillBlocks({ timeline, sessions, status, scratch }, state.rows.filter((r) => r.state === 'final'));
   dash.classList.remove('refreshing');
   dash.scrollTop = scroll;
   // 실시간으로 위에 줄이 붙어도 보던 줄이 제자리에 있게 한다. 맨 위를 보고 있었으면 새 줄을 보인다.
@@ -1944,15 +1945,16 @@ async function renderHome() {
 }
 
 // 개요에서 고를 수 있는 위젯. 제목줄과 키보드 안내는 틀이라 대상이 아니다.
-const HOME_BLOCKS = ['changes', 'finals', 'activity', 'kinds', 'agents', 'workspaces', 'sessions', 'status', 'favorites', 'tags'];
-// 처음 켜 두는 것. 나머지는 구성에서 고른다 — 열 개를 다 펼치면 첫 화면이 읽히지 않는다.
-const HOME_DEFAULT_ON = ['changes', 'finals', 'activity', 'kinds', 'agents', 'workspaces'];
+const HOME_BLOCKS = ['changes', 'finals', 'scratch', 'activity', 'kinds', 'agents', 'workspaces', 'sessions', 'status', 'favorites', 'tags'];
+// 처음 켜 두는 것. 나머지는 구성에서 고른다 — 열한 개를 다 펼치면 첫 화면이 읽히지 않는다.
+// 임시 이미지는 켜 둔다. 처음 수집한 것은 피드에 오르지 않아서, 여기 없으면 있는 줄을 모른다(실제로 그랬다).
+const HOME_DEFAULT_ON = ['changes', 'finals', 'scratch', 'activity', 'kinds', 'agents', 'workspaces'];
 // 위젯 이름은 그 위젯이 실제로 쓰는 제목을 빌린다. 사전이 갈라지면 구성과 화면이 다른 말을 한다.
 const HOME_BLOCK_LABEL = {
   changes: 'changes.title', finals: 'home.finalsTitle', activity: 'home.block.activity',
   kinds: 'dist.kind', agents: 'dist.agent', workspaces: 'dist.workspace',
   sessions: 'home.block.sessions', status: 'home.block.status',
-  favorites: 'home.favoritesTitle', tags: 'filter.tag',
+  favorites: 'home.favoritesTitle', tags: 'filter.tag', scratch: 'home.block.scratch',
 };
 const HOME_SESSION_COUNT = 5;
 
@@ -1962,14 +1964,15 @@ const GRID = { columns: 12, cellHeight: 40, margin: 8 };
 const GRID_DEFAULT = {
   changes: { x: 0, y: 0, w: 8, h: 9 },
   finals: { x: 8, y: 0, w: 4, h: 9 },
-  activity: { x: 0, y: 9, w: 12, h: 7 },
-  kinds: { x: 0, y: 16, w: 4, h: 6 },
-  agents: { x: 4, y: 16, w: 4, h: 6 },
-  workspaces: { x: 8, y: 16, w: 4, h: 6 },
-  sessions: { x: 0, y: 22, w: 6, h: 8 },
-  status: { x: 6, y: 22, w: 6, h: 6 },
-  favorites: { x: 0, y: 30, w: 6, h: 6 },
-  tags: { x: 6, y: 30, w: 6, h: 5 },
+  scratch: { x: 0, y: 9, w: 12, h: 7 },
+  activity: { x: 0, y: 16, w: 12, h: 7 },
+  kinds: { x: 0, y: 23, w: 4, h: 6 },
+  agents: { x: 4, y: 23, w: 4, h: 6 },
+  workspaces: { x: 8, y: 23, w: 4, h: 6 },
+  sessions: { x: 0, y: 29, w: 6, h: 8 },
+  status: { x: 6, y: 29, w: 6, h: 6 },
+  favorites: { x: 0, y: 37, w: 6, h: 6 },
+  tags: { x: 6, y: 37, w: 6, h: 5 },
 };
 
 /** 저장된 구성과 기본값을 합친다. 모르는 id 는 버리고 빠진 id 는 뒤에 붙여 켠다 — 블록이 늘어도 설정이 안 깨진다. */
@@ -2091,10 +2094,16 @@ function fillBlocks(data, finals) {
     tags: () => distTags(),
     sessions: () => sessionsPanel(data.sessions),
     status: () => statusPanel(data.status),
+    scratch: () => scratchPanel(data.scratch),
   };
+  // 썸네일은 그림을 다시 받는다. 수집 알림마다 같은 그림을 갈아 끼우면 30초마다 깜빡이므로, 바뀌었을 때만 그린다.
+  const signatures = { scratch: JSON.stringify((data.scratch ?? []).map((s) => [s.session_ref, s.scratch_count, s.scratch.map((f) => f.id)])) };
   for (const id of HOME_BLOCKS) {
     const host = $('detail').querySelector(`.block-body[data-body="${id}"]`);
-    if (host) host.replaceChildren(build[id]());
+    if (!host) continue;
+    if (id in signatures && host.dataset.signature === signatures[id] && host.childElementCount > 0) continue;
+    host.replaceChildren(build[id]());
+    if (id in signatures) host.dataset.signature = signatures[id];
   }
 }
 
@@ -2445,6 +2454,19 @@ function sessionsPanel(sessions) {
       : el('p', { className: 'hint' }, t('activity.empty')));
 }
 
+/**
+ * 임시 이미지. 에이전트가 스크립트로 찍은 스크린샷은 세션 작업 폴더에 있다가 곧 지워질 수 있다.
+ * 처음 수집한 것은 피드에 오르지 않으므로 여기서 세션별로 묶어 보인다.
+ */
+function scratchPanel(sessions) {
+  if (!sessions) return el('p', { className: 'hint' }, t('home.activityFailed'));
+  return el('section', { className: 'home-sessions' },
+    el('h3', {}, t('home.block.scratch')),
+    sessions.length
+      ? el('ul', { className: 'session-list' }, ...sessions.slice(0, HOME_SESSION_COUNT).map(sessionCard))
+      : el('p', { className: 'hint' }, t('scratch.empty')));
+}
+
 /** 수집이 살아 있나. 상단의 점과 탭 제목이 말하는 것을 펼쳐 놓은 자리다. */
 function statusPanel(status) {
   if (!status) return el('p', { className: 'hint' }, t('home.statusFailed'));
@@ -2551,7 +2573,7 @@ function sessionCard(session) {
     addRowNode(file.id, node);
     return node;
   });
-  const hidden = session.file_count - session.files.length;
+  const hidden = session.file_count - (session.scratch_count ?? 0) - session.files.length;
 
   return el('li', { className: 'session' },
     el('div', { className: 'session-head' },
@@ -2562,9 +2584,32 @@ function sessionCard(session) {
       // 대화 하나가 띄운 서브에이전트 중 파일을 만든 스레드 수. 큰 작업인지 한눈에 보인다.
       session.subagent_count > 0 && el('span', { className: 'badge multi' }, t('session.subagents', { n: session.subagent_count }))),
     el('div', { className: 'session-title' }, session.session_title ?? t('untitled')),
-    el('div', { className: 'session-files' }, ...files,
+    (files.length > 0 || hidden > 0) && el('div', { className: 'session-files' }, ...files,
       hidden > 0 && el('span', { className: 'session-more' }, t('session.more', { n: hidden }))),
+    session.scratch?.length > 0 && scratchStrip(session),
   );
+}
+
+/** 세션 작업 폴더의 이미지. 이름만으로는 무엇인지 알 수 없어 작은 그림으로 따로 묶고, 곧 지워질 수 있다고 적는다. */
+function scratchStrip(session) {
+  const more = session.scratch_count - session.scratch.length;
+  return el('div', { className: 'session-scratch' },
+    el('div', { className: 'session-scratch-head' },
+      el('span', { className: 'where-scratch', title: t('where.scratchTitle') }, t('where.scratch')),
+      el('span', {}, t('scratch.count', { n: session.scratch_count }))),
+    el('div', { className: 'scratch-thumbs' },
+      ...session.scratch.map((file) => {
+        const node = el('button', {
+          type: 'button',
+          className: 'scratch-thumb',
+          title: file.file_name,
+          attrs: { 'aria-selected': String(state.selected === file.id) },
+          onclick: () => select(file.id),
+        }, el('img', { src: `/artifact/${file.id}/raw`, alt: file.file_name, loading: 'lazy' }));
+        addRowNode(file.id, node);
+        return node;
+      }),
+      more > 0 && el('span', { className: 'session-more' }, t('session.more', { n: more }))));
 }
 
 async function refreshActivity() {
@@ -2575,7 +2620,7 @@ async function refreshActivity() {
   list.replaceChildren();
   rowNodes.clear();
   state.visible = [];
-  state.rows = sessions.flatMap((s) => s.files);
+  state.rows = sessions.flatMap((s) => [...s.files, ...(s.scratch ?? [])]);
   state.total = sessions.length;
   state.signature = '';
   $('collapse-all').hidden = true;

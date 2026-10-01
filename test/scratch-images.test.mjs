@@ -1,11 +1,12 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { scratchImages } from '../lib/scratch-images.mjs';
 import { ingestFile, sweepScratchImages } from '../lib/collector.mjs';
 import { CatalogStore } from '../lib/store.mjs';
 import { locationOf } from '../lib/describe.mjs';
+import { activity } from '../lib/search.mjs';
 
 const SESSION = 'f474cde7-8f84-4783-971c-b0cf014513c7';
 const PNG = Buffer.from('89504e470d0a1a0a0000000d49484452', 'hex');
@@ -69,5 +70,29 @@ describe('세션 작업 폴더의 이미지', () => {
     expect(locationOf(path, ['/Users/me/proj'], '/Users/me')).toEqual({ repo: 'proj', dir: 'shots/', scratch: SESSION });
     expect(locationOf(`/tmp/claude-501/x/${SESSION}/scratchpad/a.png`, [], '/Users/me')).toEqual({ repo: null, dir: '/', scratch: SESSION });
     expect(locationOf('/Users/me/proj/docs/a.png', ['/Users/me/proj'], '/Users/me')).toEqual({ repo: 'proj', dir: 'docs/' });
+  });
+});
+
+describe('활동 보기의 임시 이미지', () => {
+  test('세션의 다른 파일과 섞지 않고 따로 준다 — scratchOnly 는 그 이미지가 있는 세션만 센다', async () => {
+    // 위치 규칙이 실제 임시 폴더 모양(`<tmp>/claude-*/…/scratchpad/`)을 보므로 그 모양으로 만든다.
+    const tmp = mkdtempSync(join(realpathSync('/tmp'), 'claude-om-test-'));
+    try {
+      write(join(tmp, '-Users-me-proj', SESSION, 'scratchpad', 'shots', 'after.png'));
+      const notes = write(join(root, 'proj', 'notes.md'), '# 메모');
+      await ingestFile(store, notes, { collector: 'claude-code', provider: 'claude-code', sessionRef: SESSION, workspace: join(root, 'proj') });
+      const other = write(join(root, 'other', 'b.md'), '# 다른 세션');
+      await ingestFile(store, other, { collector: 'claude-code', provider: 'claude-code', sessionRef: 'other-session' });
+      await sweepScratchImages(store, tmp);
+
+      const mine = activity(store).find((session) => session.session_ref === SESSION);
+      expect(mine.files.map((file) => file.file_name)).toEqual(['notes.md']);
+      expect(mine.scratch.map((file) => file.file_name)).toEqual(['after.png']);
+      expect([mine.file_count, mine.scratch_count]).toEqual([2, 1]);
+      expect(activity(store, { scratchOnly: true }).map((session) => [session.session_ref, session.files.length, session.scratch.length]))
+        .toEqual([[SESSION, 0, 1]]);
+    } finally {
+      rmSync(tmp, { recursive: true, force: true });
+    }
   });
 });
