@@ -15,6 +15,11 @@ const ORIGIN_PREVIEW_COUNT = 8;
 const HOME_LIST_COUNT = 6;
 // 변경 목록은 한 번에 이만큼 받고, 개요에는 앞의 몇 개만 둔다.
 const CHANGE_PAGE_SIZE = 30;
+// 활동 보기에서 새로 들어온 카드와 그림을 강조하는 시간. 수집 알림 간격(30초)보다 짧게 둔다.
+const ACTIVITY_FRESH_MS = 8_000;
+// 이만큼 내려 보고 있으면 새 카드로 화면을 밀지 않고 위에 알림만 띄운다.
+const ACTIVITY_FOLLOW_PX = 24;
+const THUMB_SIZES = ['small', 'large'];
 // 이 시간 안에 생기거나 바뀐 파일에는 트리에서 표시를 단다. 그 뒤로는 평범한 줄로 돌아간다.
 const FRESH_WINDOW_S = 10 * 60;
 // 미리보기에서 칠하는 일치의 상한. 2MB 로그에서 흔한 낱말을 찾으면 수만 곳이 맞아 화면이 멈춘다.
@@ -272,16 +277,34 @@ function searchParams(extra = {}) {
   return params;
 }
 
-/** 활동 보기가 듣는 것만. 목록이 무시하는 필터로 사이드바를 좁히면 없는 것을 광고한다. */
-function activityParams() {
+/**
+ * 활동 보기가 듣는 것만. 목록이 무시하는 필터로 사이드바를 좁히면 없는 것을 광고한다.
+ * 활동 보기 자신은 임시 이미지를 늘 보인다 — 스위치는 라이브러리와 피드가 시끄러워서 생겼고, 활동은
+ * 에이전트가 무엇을 하는지 지켜보는 자리다. 개요의 위젯은 라이브러리 화면이라 스위치를 따른다.
+ */
+function activityParams({ temporary = state.showTemporary } = {}) {
   const params = new URLSearchParams();
   for (const key of ACTIVITY_FILTERS) for (const item of selected(key)) params.append(key, item);
   if (state.period !== 'all') params.set('period', state.period);
-  if (state.showTemporary) params.set('temporary', '1');
+  if (temporary) params.set('temporary', '1');
   return params;
 }
 
-/** 임시 이미지를 보이거나 숨긴다. 목록 · 건수 · 피드 · 활동 · 개요가 한꺼번에 따라 바뀐다. */
+/**
+ * 임시 이미지 스위치. 필터가 아니라 보기 설정이라 필터 패널 안이 아니라 필터 줄 끝에 늘 보이게 둔다.
+ * 꺼져 있으면 숨긴 수를 적는다. 활동 보기는 늘 보이므로 거기서는 감춘다.
+ */
+function renderTemporaryToggle() {
+  const button = $('temporary-toggle');
+  const hidden = state.facets?.temporaryHidden ?? 0;
+  button.hidden = state.mode !== 'library' || (!state.showTemporary && hidden === 0);
+  button.setAttribute('aria-pressed', String(state.showTemporary));
+  button.title = state.showTemporary ? t('temporary.shownTitle') : t('temporary.hiddenTitle', { n: hidden });
+  button.replaceChildren(t('temporary.label'), !state.showTemporary && hidden > 0 ? el('span', { className: 'n' }, num(hidden)) : '');
+}
+$('temporary-toggle').addEventListener('click', () => setShowTemporary(!state.showTemporary));
+
+/** 임시 이미지를 보이거나 숨긴다. 목록 · 건수 · 피드 · 개요가 한꺼번에 따라 바뀐다. */
 function setShowTemporary(on) {
   state.showTemporary = on;
   prefs.write('show.temporary', on);
@@ -425,6 +448,8 @@ function setModeState(mode) {
   $('mode-activity').setAttribute('aria-selected', String(mode === 'activity'));
   $('q').disabled = mode === 'activity';
   $('q').placeholder = t(mode === 'activity' ? 'search.disabled' : 'search.placeholder');
+  $('thumb-size').hidden = mode !== 'activity';
+  renderTemporaryToggle();
   updateWide();
 }
 
@@ -527,7 +552,7 @@ function renderActiveFilters() {
 async function loadFacets() {
   // 활동 보기는 collector·workspace 만 본다. 목록이 무시하는 필터로 사이드바를 좁히면
   // 사이드바가 목록에 없는 것을 광고한다.
-  const params = state.mode === 'activity' ? activityParams() : searchParams();
+  const params = state.mode === 'activity' ? activityParams({ temporary: true }) : searchParams();
   state.facets = await api(`/api/facets?${params}`);
   return state.facets;
 }
@@ -611,15 +636,6 @@ function renderFilters(data) {
     onclick: () => toggleFilter('favorite', true),
   }, el('span', { className: 'facet-name' }, t('facet.favoritesOnly')));
 
-  // 숨긴 수를 함께 적는다. 꺼 두면 무엇이 빠졌는지 보이지 않는다.
-  const temporary = el('button', {
-    type: 'button',
-    className: 'facet facet-favorite',
-    title: t('facet.temporaryTitle'),
-    attrs: { 'aria-pressed': String(state.showTemporary), 'data-facet': 'temporary' },
-    onclick: () => setShowTemporary(!state.showTemporary),
-  }, el('span', { className: 'facet-name' }, t('facet.temporary')),
-  !state.showTemporary && data.temporaryHidden > 0 && el('span', { className: 'n' }, data.temporaryHidden.toLocaleString(locale())));
 
   const sections = groups.filter(([, , items]) => items?.length).map(([key, label, items]) => {
     const picked = selected(key);
@@ -650,7 +666,8 @@ function renderFilters(data) {
 
   // 필터를 고를 때마다 목록을 통째로 다시 그린다. 패널 안에서 고르던 키보드 초점이 사라지지 않게 같은 항목으로 되돌린다.
   const focused = $('facets').contains(document.activeElement) ? document.activeElement.dataset.facet : null;
-  $('facets').replaceChildren(...keep([favorite, temporary, ...sections]));
+  $('facets').replaceChildren(...keep([favorite, ...sections]));
+  renderTemporaryToggle();
   if (focused) $('facets').querySelector(`[data-facet="${CSS.escape(focused)}"]`)?.focus();
   renderActiveFilters();
 
@@ -1273,7 +1290,7 @@ function updateSummary() {
  */
 async function refresh({ live = false } = {}) {
   renderStats();
-  if (state.mode === 'activity') return refreshActivity();
+  if (state.mode === 'activity') return refreshActivity({ live });
 
   // 검색 결과는 묶지 않으므로 묶기와 접기가 할 일이 없다.
   $('collapse-all').hidden = hasQuery();
@@ -2642,10 +2659,43 @@ function scratchStrip(session) {
       more > 0 && el('span', { className: 'session-more' }, t('session.more', { n: more }))));
 }
 
-async function refreshActivity() {
-  const { sessions } = await api(`/api/activity?${activityParams()}`);
+// 활동 보기를 다시 그리기 전에 본 것. 무엇이 새로 들어왔는지는 이것과 견준다. 범위(필터 · 기간)가 바뀌면 처음부터.
+let activitySeen = null;
+let thumbSize = THUMB_SIZES.includes(prefs.read('activity.thumbs', 'small')) ? prefs.read('activity.thumbs', 'small') : 'small';
+const sessionKey = (session) => `${session.collector}\u0000${session.session_ref}`;
+
+/** 활동 카드의 그림 크기. 크게 고르면 무엇을 찍은 화면인지 알아볼 만큼 키운다. */
+function renderThumbSize() {
+  $('rows').dataset.thumbs = thumbSize;
+  $('thumb-size').setAttribute('aria-label', t('thumbs.aria'));
+  $('thumb-size').replaceChildren(...THUMB_SIZES.map((size) => el('button', {
+    type: 'button',
+    attrs: { role: 'radio', 'aria-checked': String(thumbSize === size) },
+    onclick: () => {
+      thumbSize = size;
+      prefs.write('activity.thumbs', size);
+      renderThumbSize();
+    },
+  }, t(`thumbs.${size}`))));
+}
+
+/**
+ * 활동 타임라인. 최신 작업이 위다 — 최근 변경 · 라이브러리와 같은 방향이다. 수집 알림으로 다시 그릴 때
+ * 새로 들어온 카드와 그림을 잠깐 강조한다. 아래로 내려 보고 있으면 보던 카드를 제자리에 두고, 위에 새 작업
+ * 수만 알린다 — 지켜보는 동안 읽던 카드가 밀려 내려가면 놓친다.
+ */
+async function refreshActivity({ live = false } = {}) {
+  const params = activityParams({ temporary: true });
+  const { sessions } = await api(`/api/activity?${params}`);
 
   const list = $('rows');
+  const scope = params.toString();
+  const before = live && activitySeen?.scope === scope ? activitySeen : null;
+  const following = list.scrollTop > ACTIVITY_FOLLOW_PX;
+  const anchor = following ? [...list.querySelectorAll('.session')].find((card) => card.getBoundingClientRect().bottom > list.getBoundingClientRect().top) : null;
+  const anchorKey = anchor?.dataset.key;
+  const anchorOffset = anchor ? anchor.getBoundingClientRect().top - list.getBoundingClientRect().top : 0;
+
   list.setAttribute('role', 'list');
   list.replaceChildren();
   rowNodes.clear();
@@ -2655,9 +2705,42 @@ async function refreshActivity() {
   state.signature = '';
   $('collapse-all').hidden = true;
   $('group-by').parentElement.hidden = true;
+  renderThumbSize();
 
   if (sessions.length === 0) list.append(el('li', { className: 'empty' }, el('p', {}, t('activity.empty'))));
-  for (const session of sessions) list.append(sessionCard(session));
+  const fresh = [];
+  for (const session of sessions) {
+    const card = sessionCard(session);
+    card.dataset.key = sessionKey(session);
+    list.append(card);
+    if (!before) continue;
+    const seenAt = before.sessions.get(card.dataset.key);
+    if (seenAt === undefined || session.at > seenAt) fresh.push(card);
+    for (const file of [...session.files, ...(session.scratch ?? [])]) {
+      if (before.files.has(file.id)) continue;
+      for (const node of rowNodes.get(file.id) ?? []) node.classList.add('fresh');
+    }
+  }
+  for (const card of fresh) card.classList.add('fresh');
+  activitySeen = {
+    scope,
+    sessions: new Map(sessions.map((session) => [sessionKey(session), session.at])),
+    files: new Set(state.rows.map((file) => file.id)),
+  };
+  if (fresh.length || before) setTimeout(() => list.querySelectorAll('.fresh').forEach((node) => node.classList.remove('fresh')), ACTIVITY_FRESH_MS);
+
+  // 보던 카드를 제자리에 둔다. 그 위로 새로 들어온 카드 수를 알리고, 누르면 맨 위로 간다.
+  const kept = anchorKey ? [...list.querySelectorAll('.session')].find((card) => card.dataset.key === anchorKey) : null;
+  if (kept) {
+    list.scrollTop += kept.getBoundingClientRect().top - list.getBoundingClientRect().top - anchorOffset;
+    const above = fresh.filter((card) => card.compareDocumentPosition(kept) & Node.DOCUMENT_POSITION_FOLLOWING).length;
+    if (above > 0) {
+      list.prepend(el('li', { className: 'activity-new' }, el('button', {
+        type: 'button',
+        onclick: () => list.scrollTo({ top: 0 }),
+      }, t('activity.newAbove', { n: above }))));
+    }
+  }
 
   $('summary').textContent = t('activity.summary', { n: sessions.length });
   $('hint').textContent = '';
@@ -2773,7 +2856,7 @@ $('facets').addEventListener('keydown', (event) => {
   // 접힌 묶음 안의 항목도 레이아웃 크기는 가져서 화면 크기로는 가려지지 않는다. 그런 항목은 초점을 받지 못한다.
   const reachable = (node) => node.tagName === 'SUMMARY' || !node.closest('details') || node.closest('details').open;
   const items = [...$('facets').querySelectorAll('button, summary')].filter(reachable);
-  const heads = items.filter((node) => node.tagName === 'SUMMARY' || node.dataset.facet === 'favorite' || node.dataset.facet === 'temporary');
+  const heads = items.filter((node) => node.tagName === 'SUMMARY' || node.dataset.facet === 'favorite');
   const step = (list, delta) => {
     const at = list.indexOf(document.activeElement);
     const here = at >= 0 ? at : list.findLastIndex((node) => node.compareDocumentPosition(document.activeElement) & Node.DOCUMENT_POSITION_FOLLOWING);

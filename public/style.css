@@ -317,6 +317,14 @@ kbd {
   display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-1);
   min-height: 28px; padding: 2px var(--space-2) 2px var(--space-3);
 }
+/* 임시 이미지 스위치. 필터가 아니라 보기 설정이라 필터 줄 끝에 따로 선다. 숨긴 수를 함께 적는다. */
+.temporary-toggle {
+  margin-left: auto; display: inline-flex; align-items: center; gap: 6px;
+  min-height: 22px; padding: 0 var(--space-2); font-size: var(--text-xs);
+  border: 1px dashed var(--border-strong); border-radius: var(--radius); background: transparent; color: var(--text-dim);
+}
+.temporary-toggle .n { color: var(--text-dim); font-variant-numeric: tabular-nums; }
+.temporary-toggle[aria-pressed="true"] { border-style: solid; }
 .filters-button {
   display: inline-flex; align-items: center; gap: 2px;
   min-height: 22px; padding: 0 var(--space-1) 0 var(--space-2);
@@ -881,6 +889,17 @@ embed.preview-fill { height: 100%; }
 .session-file[aria-selected="true"] { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
 .session-file.final { border-color: var(--final); }
 .session-more { font-size: var(--text-xs); color: var(--text-dim); align-self: center; }
+/* 크게: 무엇을 찍은 화면인지 알아볼 만큼. 화면 비율이 제각각이라(모바일 · 데스크톱) 자르지 않고 담는다. */
+.tree[data-thumbs="large"] .scratch-thumb { width: 240px; height: 150px; }
+.tree[data-thumbs="large"] .scratch-thumb img { object-fit: contain; }
+/* 방금 들어온 작업과 그림. 잠깐 칠했다가 지운다 — 지켜보는 눈이 어디가 바뀌었는지 찾지 않게. */
+.session { transition: background-color .6s var(--ease-out); }
+.session.fresh { background: var(--accent-soft); }
+.session-file.fresh, .scratch-thumb.fresh { border-color: var(--accent); }
+/* 내려 보고 있을 때 위로 들어온 새 작업. 목록 맨 위에 붙어 있다가 누르면 맨 위로 간다. */
+.activity-new { position: sticky; top: 0; z-index: 1; display: flex; justify-content: center; list-style: none; padding: var(--space-1) 0; }
+.activity-new button { min-height: 24px; font-size: var(--text-xs); border-color: var(--accent); color: var(--accent); background: var(--bg); box-shadow: 0 1px 3px rgba(0, 0, 0, .12); }
+.thumb-size button { min-width: 40px; min-height: 22px; font-size: var(--text-xs); }
 /* 세션 작업 폴더의 이미지. 파일 이름 대신 작은 그림으로 따로 묶는다. 칸은 고정이라 그림이 늦게 와도 줄이 밀리지 않는다. */
 .session-scratch { margin-top: var(--space-2); display: grid; gap: var(--space-1); }
 .session-scratch-head { display: flex; align-items: center; gap: 6px; font-size: var(--text-xs); color: var(--text-dim); }
