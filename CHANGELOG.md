@@ -8,6 +8,8 @@ lives in `package.json`; `output-mesh --version` and the explorer footer show it
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-10-01
+
 ### Added
 
 - **explorer:** show the logos of the agents that made the files in each folder, next to the folder name
