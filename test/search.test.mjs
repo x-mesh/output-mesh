@@ -354,3 +354,31 @@ describe('V12 — 발췌는 마크다운 장식을 벗는다', () => {
     expect(got).toContain('2 * 3');
   });
 });
+
+describe('여러 값 필터', () => {
+  const origin = (id, collector, provider, sessionRef) => store.recordOrigin(id, { collector, provider, sessionRef });
+  beforeEach(() => {
+    origin(index('codex.md', 'a'), 'codex', 'openai-codex', 's1');
+    origin(index('claude.md', 'b'), 'claude-code', 'claude-code', 's2');
+    origin(index('cursor.md', 'c'), 'cursor', 'cursor', 's3');
+    origin(index('codex.png', 'd'), 'codex', 'openai-codex', 's4');
+  });
+  const names = (filters) => search(store, '', filters).map((r) => r.file_name).sort();
+
+  test('같은 차원 안에서는 어느 값이든 맞으면 걸린다', () => {
+    expect(names({ provider: ['openai-codex', 'claude-code'] })).toEqual(['claude.md', 'codex.md', 'codex.png']);
+  });
+
+  test('차원끼리는 모두 맞아야 한다', () => {
+    expect(names({ provider: ['openai-codex', 'claude-code'], ext: ['md'] })).toEqual(['claude.md', 'codex.md']);
+  });
+
+  test('값 하나만 넘겨도 예전처럼 걸린다', () => {
+    expect(names({ provider: 'cursor' })).toEqual(['cursor.md']);
+  });
+
+  test('자기 차원에서 고른 값은 그 차원의 건수를 줄이지 않는다', () => {
+    const counts = Object.fromEntries(facets(store, { provider: ['openai-codex'] }).providers.map((p) => [p.value, p.n]));
+    expect(counts).toEqual({ 'openai-codex': 2, 'claude-code': 1, cursor: 1 });
+  });
+});
