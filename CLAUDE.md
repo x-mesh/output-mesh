@@ -109,7 +109,7 @@ bun bin/output-mesh.mjs start|stop|restart|status|uninstall
 
 - **그리드를 다시 세우는 건 블록을 켜고 끌 때뿐이다.** 수집 알림이 30초마다 `renderHome` 을 부르는데 그때마다 `GridStack.init` 을 다시 하면 화면이 깜빡이고 끌던 손이 끊긴다. 틀은 두고 `fillBlocks` 가 `.block-body` 안만 갈아 끼운다.
 - **`handle: '.drag-handle'`.** 위젯 전체를 끌 수 있게 두면 피드 글자를 긁어 고를 수 없다.
-- **`alwaysShowResizeHandle: true`.** 기본값은 hover 때만 보인다. 작은 `구성` 링크 하나로는 아무도 못 찾았고, 같은 이유로 손잡이도 늘 보여야 한다.
+- **`alwaysShowResizeHandle: true`.** 기본값은 hover 때만 보인다. 작은 `구성` 링크 하나로는 아무도 못 찾았고(지금 이름은 `위젯 구성`), 같은 이유로 손잡이도 늘 보여야 한다.
 - **손잡이는 textarea 모서리와 같은 대각선 빗금이다.** gridstack 의 기본 아이콘은 위아래 화살표를 45도 돌려 쓰는데, 회전을 끄자 세로로만 늘어나는 것처럼 보였고 옅은 테두리는 눈에 띄지 않았다. 보조 글자색으로 그리고 커서는 `nwse-resize` 다.
 - **위젯이 쓰는 것만 받는다.** 최근 작업(`/api/activity`)과 수집 상태(`/api/status`)는 그 위젯이 켜져 있을 때만 부른다. 개요는 수집 알림마다 다시 그려져서, 안 보이는 위젯의 요청이 30초마다 쌓인다.
 - **키보드는 구성 패널이 맡는다.** 끌기와 크기 조절은 마우스만 닿으므로, 켜고 끄기 · 한 칸 이동 · 기본 배치 복원을 패널에 둔다. `PRODUCT.md` 의 "키보드로 끝까지 간다"를 이 경로가 지킨다.
@@ -141,7 +141,7 @@ bun bin/output-mesh.mjs start|stop|restart|status|uninstall
 
 **코드 판정은 확장자만으로 부족하다.** `.tape`·`.pbxproj` 같은 스크립트와 `Makefile`·`.zshrc` 처럼 확장자가 없는 설정이 문서로 새면 산출물이 묻힌다. `kindOf(ext, fileName)` 이 파일명까지 본다 — 점으로 시작하면 설정, 확장자가 없으면 문서가 아니다.
 
-**에이전트 메모는 숨기되 버리지 않는다.** Claude Code 의 프로젝트 memory(`~/.claude/projects/*/memory/`)는 에이전트가 자기용으로 적는 메모다. 실측 18개가 라이브러리와 "방금 일어난 일" 맨 위에 섞여 산출물을 가렸다. 수집에서 빼면 나중에 찾을 수 없으므로 종류 `memo` 로 분류해 코드처럼 라이브러리에서만 숨긴다. 이 종류는 `listKindOf(ext, fileName, absPath)` 만 낸다 — `kindOf` 는 추출과 미리보기를 구동하고 메모도 문서로 읽혀야 하므로 경로를 보지 않는다. 폴더 이름 `memory` 만으로 가르지 않는다: 저장소의 `docs/memory/` 는 진짜 문서다. 반대로 Claude Code 의 세션 임시 폴더(`/private/tmp/claude-*/`)는 세션이 끝나면 버려지는 자리라 세션 로그 수집에서 뺀다(`isIndexablePath`). 임시 폴더 전체를 거르지는 않는다.
+**에이전트 메모는 숨기되 버리지 않는다.** Claude Code 의 프로젝트 memory(`~/.claude/projects/*/memory/`)는 에이전트가 자기용으로 적는 메모다. 실측 18개가 라이브러리와 "최근 변경" 맨 위에 섞여 산출물을 가렸다. 수집에서 빼면 나중에 찾을 수 없으므로 종류 `memo` 로 분류해 코드처럼 라이브러리에서만 숨긴다. 이 종류는 `listKindOf(ext, fileName, absPath)` 만 낸다 — `kindOf` 는 추출과 미리보기를 구동하고 메모도 문서로 읽혀야 하므로 경로를 보지 않는다. 폴더 이름 `memory` 만으로 가르지 않는다: 저장소의 `docs/memory/` 는 진짜 문서다. 반대로 Claude Code 의 세션 임시 폴더(`/private/tmp/claude-*/`)는 세션이 끝나면 버려지는 자리라 세션 로그 수집에서 뺀다(`isIndexablePath`). 임시 폴더 전체를 거르지는 않는다.
 
 **분류는 쓸 때 굳는다.** `artifacts.kind` 가 그 결과를 담는다. 읽을 때 분류하면 호출부마다 인자를 빠뜨릴 수 있고(실제로 `server.mjs` 세 곳이 갈라져 있었다) `missing_at` 으로 좁힌 id 목록에 이음매가 생긴다. 컬럼이면 `a.kind` 하나라 갈라질 수가 없다. 대신 캐시이므로 **무효화 키가 필요하다** — `kindOf` 를 고치면 그 바로 위의 `KIND_RULES_VERSION` 을 올린다. 안 올리면 분류 수정이 기존 행에 아무 효과도 내지 않는다.
 
@@ -157,7 +157,7 @@ bun bin/output-mesh.mjs start|stop|restart|status|uninstall
 - **이미 아는 파일에는 출처를 더하지 않는다.** 바뀐 내용은 다시 확인이 잡는다. 더하면 파일 mtime 이 세션 시각보다 늦어서 대표 출처가 에이전트에서 `workspace` 로 뒤집힌다.
 - **세션이 없는 출처는 에이전트 활동이 아니다.** `session_ref = ''` 인 출처(작업공간·가져오기)는 사건 `source` 가 `disk` 이고, 타임라인과 24시간 작업 수에서 빠진다.
 
-**피드가 숨긴 것은 건수로 남긴다.** "방금 일어난 일"은 라이브러리 규칙을 따라 코드·기타를 뺀다. 빼기만 하면 코드를 고쳤는데 피드가 조용해 수집이 멈춘 것처럼 보이므로, `recentChanges` 가 보인 가장 오래된 변경 이후의 숨긴 건수를 `hidden` 으로 같이 준다.
+**피드가 숨긴 것은 건수로 남긴다.** "최근 변경"(예전 이름 "방금 일어난 일")은 라이브러리 규칙을 따라 코드·기타를 뺀다. 빼기만 하면 코드를 고쳤는데 피드가 조용해 수집이 멈춘 것처럼 보이므로, `recentChanges` 가 보인 가장 오래된 변경 이후의 숨긴 건수를 `hidden` 으로 같이 준다.
 
 **코드 색칠은 `tokenize` 로 한다.** `@speed-highlight/core`(2.1.0, CC0-1.0, `public/vendor/shj/`, 30KB)가 주는 `highlightElement` 는 `innerHTML` 로 넣는데, 코드 미리보기는 에이전트가 만든 파일을 **우리 문서 안에서** 그리는 자리다(마크다운·아티팩트 HTML 과 달리 iframe 이 아니다). 그래서 문자열을 HTML 로 되돌리지 않고 토큰마다 노드를 만든다 — 덤으로 검색어 표시(`<mark>`)를 토큰 안에 그대로 섞을 수 있다(실측 11개 모두 토큰 안).
 
