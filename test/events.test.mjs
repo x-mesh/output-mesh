@@ -125,6 +125,33 @@ describe('워처와 변경 목록', () => {
     expect(watcher.claudeReader.outputDir.startsWith(dir)).toBe(true);
   });
 
+  test('주입한 home 밖의 Gemini 데이터를 읽지 않는다', () => {
+    const watcher = new Watcher(store, [], { useFsWatch: false, withSessionLogs: false, home: dir });
+    expect(watcher.geminiReader.roots.every((root) => root.startsWith(dir))).toBe(true);
+  });
+
+  test('Gemini 수집 실패 뒤에도 나머지 수집을 끝낸다', async () => {
+    const geminiReader = { roots: [], brainRoots: [], scan: async () => { throw new Error('CANARY_SECRET'); } };
+    const claudeReader = { sweep: async () => ({}) };
+    const watcher = new Watcher(store, [], { useFsWatch: false, withSessionLogs: true, home: dir, geminiReader, claudeReader, sessionLogSources: [] });
+    watcher.cursorReader = { available: () => false };
+    const result = await watcher.collect();
+    expect(result.find((entry) => 'gemini' in entry)).toEqual({ gemini: null });
+    expect(result.some((entry) => 'indexed' in entry)).toBe(true);
+    expect(store.getState('gemini.last_sweep_code')).toBe('failed');
+    expect(JSON.stringify(store.recentIngestEvents())).not.toContain('CANARY_SECRET');
+  });
+
+  test('주기 수집이 Gemini reader를 호출한다', async () => {
+    let scans = 0;
+    const geminiReader = { roots: [], brainRoots: [], scan: async () => { scans++; return { available: true, records: [], stats: { roots: 0, sessions: 0, logs: 0, bytes: 0, writes: 0, artifacts: 0, missing: 0, skipped: 0, errors: 0 } }; }, availableRoots: () => [] };
+    const claudeReader = { sweep: async () => ({}) };
+    const watcher = new Watcher(store, [], { useFsWatch: false, withSessionLogs: true, home: dir, geminiReader, claudeReader, sessionLogSources: [] });
+    watcher.cursorReader = { available: () => false };
+    await watcher.collect();
+    expect(scans).toBe(1);
+  });
+
   test('세션 로그를 끈 워처는 Claude Desktop cache 를 수집하지 않는다', async () => {
     let swept = false;
     const claudeReader = { cacheDataRoot: join(dir, 'Cache_Data'), sweep: async () => { swept = true; return {}; } };

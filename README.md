@@ -59,6 +59,7 @@ bun bin/output-mesh.mjs
 | Codex | `~/.codex/sessions/**/rollout-*.jsonl` | Paths from `apply_patch` markers in session logs |
 | Claude Code | `~/.claude/projects/**/*.jsonl` | `file_path` of `Write` / `Edit` tool calls |
 | Claude Desktop | `~/Library/Application Support/Claude/Cache/Cache_Data/` | Artifact HTML, files that chats wrote, and chat widgets from the local cache |
+| Gemini Antigravity | `~/.gemini/{antigravity,antigravity-cli,antigravity-ide}/brain/` | Local session artifacts and paths from write tool calls |
 | Cursor | `~/Library/Application Support/Cursor/.../state.vscdb` | Files a composer edited or created (opened read-only) |
 | Your repositories | Repositories any of the above worked in | Documents changed in the last 7 days, then a folder watch for new or edited ones |
 | Anything else | A folder or file you choose | `output-mesh import <path>` |
@@ -74,6 +75,8 @@ Claude Desktop collection reads the local Chromium HTTP cache only. It never cal
 - Chat widgets, saved as HTML pages.
 
 The cache holds only the conversations that you opened in Claude Desktop. Cache eviction leaves the last collected local copy. If the private cache format changes, this source can stop.
+
+Gemini collection reads local Antigravity, Antigravity CLI, and Antigravity IDE data only. It reads canonical session artifacts and existing files referenced by `write_to_file` or `replace_file_content`. It excludes scratch files, uploads, generated internals, metadata, resolved revisions, backups, Gemini web Canvas, and downloaded images. It never reads Gemini account files or calls Gemini services. A referenced repository file appears only while that file exists.
 
 A git worktree counts as its main repository. The tree shows each worktree as a `⑂ name` group below that repository. output-mesh does not collect the temporary session folder of Claude Code (`/private/tmp/claude-*/`).
 
