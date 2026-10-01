@@ -177,6 +177,8 @@ bun bin/output-mesh.mjs start|stop|restart|status|uninstall
 
 **활동은 SSE 로 살아 있다.** 수집이 한 바퀴 돌 때마다 `/api/events` 가 알리고, 워처는 Aside 뿐 아니라 Codex·Claude 로그 루트도 감시한다. 활동 보기는 바로 다시 그리고, 라이브러리는 보던 자리를 흔들지 않도록 건수만 갱신한다.
 
+- **본 수집 오류는 접는다.** 상단의 `수집 오류 · N분 전` 은 서버가 최근 한 시간의 오류를 계속 알려 주는 것이라, 이미 본 오류가 남아 있으면 지금도 실패하는 것처럼 읽혔다. 누르면 오류 화면을 열고 그 오류의 시각을 `aoc.live.errorSeenAt` 에 남긴다. 그보다 새 오류가 오기 전까지 상단과 탭 제목의 ⚠ 는 평소 표시로 돌아간다. 개요의 수집 상태 위젯은 기록이라 그대로 보여 준다.
+
 `KIND.CODE` 는 추출·미리보기에서 `KIND.TEXT` 와 동일하게 처리된다 — 갈라 보는 건 목록에서뿐이다.
 
 **세션 제목은 첫 사람 발화다.** 로그의 첫 user 메시지는 대개 지침 덤프(AGENTS.md, system-reminder, teammate-message, Codex 의 `<environment_context>`, 스킬 호출 문구)라 건너뛴다. 이게 틀리면 활동 보기가 읽히지 않는다. 제목은 첫 줄이 아니라 쓸 만한 첫 줄이고(`titleFromPrompt`), 붙여넣은 경로로 시작하면 파일 이름만 남긴다. 출처는 새 제목이 없을 때 옛 제목을 지키므로(`COALESCE`) 이미 저장된 잡음은 활동 보기가 읽을 때 가린다(`sessionTitleOf`).

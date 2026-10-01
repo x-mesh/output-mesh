@@ -21,6 +21,7 @@ lives in `package.json`; `output-mesh --version` and the explorer footer show it
 - **overview:** draw wider activity bars with narrower gaps, so sparse weeks no longer look empty
 - **ui:** rewrite Korean labels that read like literal translations, for example the change feed is now "최근 변경"
 - **ui:** align the Output Mesh title with the node chip and the view switch in the top bar
+- **ui:** clicking the top-bar collection error opens the errors and marks them as seen, so the bar returns to the live state until a newer error arrives
 - **collect:** collect Gemini Antigravity session artifacts and the files that its write tools changed. A broken transcript line is skipped with one warning that names the file and line
 
 ## [0.7.0] - 2026-10-01
