@@ -32,6 +32,16 @@ const ageBy = (path, days) => {
 };
 const events = () => store.db.query('SELECT e.kind, e.source, a.file_name FROM artifact_events e JOIN artifacts a ON a.id = e.artifact_id ORDER BY e.id').all();
 
+/** git worktree 하나를 만든다. git 처럼 본 저장소에 목록을 적고, worktree 에는 `.git` 포인터 파일을 둔다. */
+const linkWorktree = (main, name, path) => {
+  const admin = join(main, '.git', 'worktrees', name);
+  mkdirSync(admin, { recursive: true });
+  writeFileSync(join(admin, 'gitdir'), `${join(path, '.git')}\n`);
+  mkdirSync(path, { recursive: true });
+  writeFileSync(join(path, '.git'), `gitdir: ${admin}\n`);
+  return path;
+};
+
 /** 에이전트가 이 저장소에서 파일 하나를 도구로 썼다 — 그래서 작업공간으로 알려진다. */
 async function agentWorkedIn(repo) {
   const touched = write(join(repo, 'src', 'main.rs'), 'fn main() {}');
@@ -71,9 +81,46 @@ describe('훑을 작업공간', () => {
     }
     expect(projectWorkspaces(store, home)).toEqual([repo]);
   });
+
+  test('세션이 돈 저장소의 worktree 도 훑는다 — 점 폴더 안의 worktree 는 바깥을 훑어도 안 훑이므로 따로', async () => {
+    const main = join(home, 'proj');
+    mkdirSync(join(main, '.git'), { recursive: true });
+    const outside = linkWorktree(main, 'feat', join(home, '.gk', 'worktree', 'proj', 'feat'));
+    const inside = linkWorktree(main, 'agent', join(main, '.claude', 'worktrees', 'agent'));
+    // 저장소의 하위 폴더에서 돈 세션은 그 폴더만 일한 곳이다. 저장소의 worktree 로 넓히지 않는다.
+    const mono = join(home, 'mono');
+    mkdirSync(join(mono, '.git'), { recursive: true });
+    const sub = join(mono, 'packages', 'app');
+    write(join(sub, 'package.json'), '{}');
+    linkWorktree(mono, 'x', join(home, '.gk', 'worktree', 'mono', 'x'));
+    for (const workspace of [main, sub]) {
+      await ingestFile(store, write(join(home, 'seed', `${workspace.length}.md`)), { collector: 'codex', sessionRef: workspace, workspace });
+    }
+    expect(projectWorkspaces(store, home)).toEqual([main, inside, outside, sub].sort());
+  });
 });
 
 describe('워처의 작업공간 문서', () => {
+  test('worktree 는 만든 뒤에 고친 문서만 처음에 넣는다 — 체크아웃한 본 저장소 문서의 사본은 받지 않는다', async () => {
+    const main = join(home, 'repo');
+    mkdirSync(join(main, '.git'), { recursive: true });
+    await agentWorkedIn(main);
+    const wt = linkWorktree(main, 'feat', join(home, '.gk', 'worktree', 'repo', 'feat'));
+    const createdAt = Date.now() / 1000 - DAY;
+    utimesSync(join(wt, '.git'), createdAt, createdAt);
+    const checkedOut = write(join(wt, 'README.md'), '# 사본');
+    utimesSync(checkedOut, createdAt, createdAt);
+    const edited = write(join(wt, 'CHANGELOG.md'), '# 셸로 고친 문서');
+
+    const watcher = new Watcher(store, [], { useFsWatch: false, withSessionLogs: false, home });
+    await watcher.collect();
+
+    expect(store.byPathKey(nfc(checkedOut))).toBeNull();
+    const row = store.byPathKey(nfc(edited));
+    expect(store.originsOf(row.id).map((o) => [o.collector, o.workspace])).toEqual([['workspace', wt]]);
+    watcher.stop();
+  });
+
   test('처음에는 최근 문서만 조용히 넣는다 — 원래 있던 문서를 알게 된 것이지 방금 일어난 일이 아니다', async () => {
     const repo = join(home, 'repo');
     write(join(repo, 'package.json'), '{}');
