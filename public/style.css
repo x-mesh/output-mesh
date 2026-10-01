@@ -515,8 +515,10 @@ button.chip:hover { border-color: var(--accent); color: var(--accent); backgroun
 
 .where-repo { font-weight: 600; color: var(--text); white-space: nowrap; }
 .where-dir { font-family: var(--mono); font-size: var(--text-xs); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
-.where-worktree { white-space: nowrap; }
-.where-repo + .where-dir::before, .where-worktree + .where-dir::before { content: '· '; font-family: var(--font); }
+.where-worktree, .where-scratch { white-space: nowrap; }
+/* 곧 지워질 수 있는 세션 작업 폴더의 파일. 위치 옆의 낱말로 말하고 색은 빌리지 않는다. */
+.where-scratch { font-size: var(--text-xs); color: var(--text-dim); border: 1px dashed var(--border-strong); border-radius: 4px; padding: 0 4px; }
+.where-repo + .where-dir::before, .where-worktree + .where-dir::before, .where-scratch + .where-dir::before { content: '· '; font-family: var(--font); }
 
 /* ── 본문 ─────────────────────────────────────────────────────────────── */
 

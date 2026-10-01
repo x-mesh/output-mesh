@@ -71,7 +71,7 @@ On macOS, `install` adds a LaunchAgent. On Linux, it adds a systemd user unit. U
 |---|---|---|
 | Aside | `~/.aside/u/<account>/sessions/<date>_<id>/artifacts/` | Watches the folder. Reads more data from Aside's `state.db` in read-only mode |
 | Codex | `~/.codex/sessions/**/rollout-*.jsonl` | Paths from the `apply_patch` markers in session logs |
-| Claude Code | `~/.claude/projects/**/*.jsonl` | The `file_path` of `Write` and `Edit` tool calls |
+| Claude Code | `~/.claude/projects/**/*.jsonl` and the session scratch folders in `/private/tmp/claude-<uid>/` | The `file_path` of `Write` and `Edit` tool calls, and the images in the scratch folders |
 | Claude Desktop | `~/Library/Application Support/Claude/Cache/Cache_Data/` | Artifact HTML, files that chats wrote, and chat widgets from the local cache |
 | Gemini Antigravity | `~/.gemini/{antigravity,antigravity-cli,antigravity-ide}/brain/` | Local session artifacts and the paths from write tool calls |
 | Cursor | `~/Library/Application Support/Cursor/.../state.vscdb` | Files that a composer changed or created. Opens the database in read-only mode |
@@ -94,7 +94,7 @@ Gemini collection reads only local data from Antigravity, Antigravity CLI, and A
 
 Some lines in Antigravity transcripts are not valid JSON. output-mesh skips each of these lines and records one warning for it. A warning is not a collection error.
 
-output-mesh counts a git worktree as part of its main repository. The tree shows each worktree as a `⑂ name` group below that repository. If an agent worked in a repository, output-mesh also watches all worktrees of that repository. When it reads a worktree for the first time, it collects only the documents that changed after git created the worktree. The other files are copies from the checkout. output-mesh does not collect the temporary session folders of Claude Code (`/private/tmp/claude-*/`).
+output-mesh counts a git worktree as part of its main repository. The tree shows each worktree as a `⑂ name` group below that repository. If an agent worked in a repository, output-mesh also watches all worktrees of that repository. When it reads a worktree for the first time, it collects only the documents that changed after git created the worktree. The other files are copies from the checkout. From the temporary session folders of Claude Code (`/private/tmp/claude-*/`), output-mesh collects only images, for example screenshots that an agent took with a script. Other files there are work notes and logs, so output-mesh does not collect them. A scratch image shows a "temporary" mark next to its location. output-mesh does not copy these images. When Claude Code or a restart deletes the folder, the images leave the library. The "Recent changes" feed shows one line for a set of images from one session.
 
 ## How to use it
 

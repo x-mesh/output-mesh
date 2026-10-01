@@ -250,6 +250,7 @@ function locationNodes(row) {
   return keep([
     where.repo && el('span', { className: 'where-repo' }, where.repo),
     where.worktree && el('span', { className: 'where-worktree', title: t('where.worktree', { name: where.worktree }) }, worktreeLabel(where.worktree)),
+    where.scratch && el('span', { className: 'where-scratch', title: t('where.scratchTitle') }, t('where.scratch')),
     el('span', { className: 'where-dir', title: row.abs_path }, where.dir),
   ]);
 }
@@ -1782,7 +1783,7 @@ function changesPanel() {
   const tail = state.changesMore
     ? el('li', { className: 'change-more hint' }, t('changes.loading'))
     : state.changes.length > CHANGE_PAGE_SIZE && el('li', { className: 'change-more hint' }, t('changes.end'));
-  const scroller = el('div', { className: 'change-scroll' }, el('ol', { className: 'change-list' }, ...state.changes.map(changeRow), tail));
+  const scroller = el('div', { className: 'change-scroll' }, el('ol', { className: 'change-list' }, ...changeRows(state.changes), tail));
   if (state.changesMore) {
     changesObserver = new IntersectionObserver((entries) => {
       if (entries.some((entry) => entry.isIntersecting)) void loadOlderChanges();
@@ -1790,6 +1791,41 @@ function changesPanel() {
     changesObserver.observe(tail);
   }
   return el('section', { className: 'changes' }, el('h3', {}, t('changes.title')), scroller, hiddenChangesLine());
+}
+
+/**
+ * 한 세션 작업 폴더의 이미지가 잇달아 생기거나 사라지면 한 줄로 묶는다. 스크린샷은 수십 장씩 찍히고,
+ * 재부팅하면 작업 폴더가 통째로 지워져 수백 줄이 쏟아진다. 묶음은 받은 쪽을 이어 붙인 목록에서 만들어서
+ * 다음 쪽을 받으면 쪽 경계에서 갈린 묶음도 다시 하나가 된다.
+ */
+function changeRows(changes) {
+  const rows = [];
+  for (let i = 0; i < changes.length;) {
+    const first = changes[i];
+    const session = first.location?.scratch;
+    let end = i + 1;
+    while (session && end < changes.length && changes[end].location?.scratch === session && changes[end].change === first.change) end++;
+    rows.push(end - i > 1 ? scratchGroupRow(changes.slice(i, end)) : changeRow(first));
+    i = end;
+  }
+  return rows;
+}
+
+function scratchGroupRow(group) {
+  const [first] = group;
+  return el('li', {}, el('button', {
+    type: 'button',
+    className: 'change-item',
+    onclick: () => select(first.artifact_id, { reveal: true }),
+  },
+    el('span', { className: `change-kind change-${first.change}` }, t(`change.${first.change}`)),
+    el('span', { className: 'change-name' }, t('changes.scratchImages', { n: group.length })),
+    el('span', { className: 'change-where' }, ...keep([
+      first.location.repo && el('span', { className: 'where-repo' }, first.location.repo),
+      el('span', { className: 'where-scratch', title: t('where.scratchTitle') }, t('where.scratch')),
+    ])),
+    el('span', { className: 'change-tags' }, ...changeAgents(first)),
+    el('span', { className: 'when', title: fmtDate(first.at) }, relativeWhen(first.at))));
 }
 
 function changeRow(change) {
