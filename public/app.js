@@ -196,7 +196,8 @@ const FAMILY_LABEL = { claude: 'Claude', codex: 'Codex', gemini: 'Gemini', curso
 const LOGO_OF_PROVIDER = { 'claude-code': 'claudecode', 'claude-app': 'claude', 'openai-codex': 'codex', cursor: 'cursor', gemini: 'gemini' };
 const LOGO_OF_FAMILY = { claude: 'claude', codex: 'codex', gemini: 'gemini', cursor: 'cursor' };
 const MAX_FOLDER_AGENTS = 4;
-const logo = (name, label) => el('span', { className: 'logo', attrs: { 'data-logo': name, role: 'img', 'aria-label': label, title: label } });
+// 아이콘처럼 장식이다. 이름은 옆의 글자나 묶음의 aria-label 이 말한다 — 로고에도 달면 같은 이름을 두 번 읽는다.
+const logo = (name) => el('span', { className: 'logo', attrs: { 'data-logo': name, 'aria-hidden': 'true' } });
 
 /** 출처에서 파생된 분류. 누르면 그 에이전트로 좁힌다 — 행 선택과 겹치지 않게 전파를 끊는다. */
 function providerChips(providers) {
@@ -903,7 +904,7 @@ function appendFolder(list, node, level) {
     onclick: () => toggleFolder(entry),
   },
     icon('chevron', 'chevron'),
-    node.logo ? logo(node.logo, node.label) : node.dot ? el('span', { className: 'dot', attrs: { 'data-provider': node.dot } }) : icon(node.icon),
+    node.logo ? logo(node.logo) : node.dot ? el('span', { className: 'dot', attrs: { 'data-provider': node.dot } }) : icon(node.icon),
     el('span', { className: 'tree-label', title: node.label }, node.label),
     folderAgents(node),
     el('span', { className: 'tree-count' }, node.count));
@@ -933,7 +934,7 @@ function folderAgents(node) {
   // 화면 읽기에는 묶음이 이름을 한 번만 말한다. 로고마다 이름을 달면 폴더 줄 이름이 로고 수만큼 길어진다.
   return el('span', { className: 'tree-agents', title: names, attrs: { role: 'img', 'aria-label': names } },
     ...agents.slice(0, MAX_FOLDER_AGENTS).map((p) => (LOGO_OF_PROVIDER[p]
-      ? el('span', { className: 'logo', attrs: { 'data-logo': LOGO_OF_PROVIDER[p], 'aria-hidden': 'true' } })
+      ? logo(LOGO_OF_PROVIDER[p])
       : el('span', { className: 'dot', attrs: { 'data-provider': p, 'aria-hidden': 'true' } }))));
 }
 
