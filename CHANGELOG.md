@@ -13,6 +13,8 @@ lives in `package.json`; `output-mesh --version` and the explorer footer show it
 - **explorer:** show the logos of the agents that made the files in each folder, next to the folder name
 - **explorer:** group the agent view by vendor first (Claude, Codex, Cursor), then by product (Claude Code, Claude Desktop)
 - **explorer:** open filters in a panel over the preview, so the tree stays in place. Selected filters stay as tokens next to the Filters button, and `f` opens the panel
+- **explorer:** pick several values in one filter group, for example Codex and Claude Code. Values in one group match any of them, and different groups must all match
+- **explorer:** show agent logos in the filter panel and on filter tokens
 
 ## [0.7.0] - 2026-10-01
 
