@@ -2742,14 +2742,32 @@ function renderLive(status) {
 }
 
 // 수집은 30초마다 다시 성공하므로 초록 점만으로는 한 번 난 실패가 보이지 않는다. 글자로 따로 말한다.
+// 다만 서버는 최근 한 시간의 오류를 계속 알려서, 이미 본 오류가 남아 있으면 지금도 실패하는 것처럼 읽혔다.
+// 누르면 오류 내용을 열고 그 오류를 확인한 것으로 남긴다. 그보다 새 오류가 생기기 전까지는 평소 표시로 돌아간다.
+// 확인은 보는 사람마다 따로라 브라우저에 둔다.
 let collectError = null;
-const collectErrorButton = el('button', { type: 'button', className: 'link danger', hidden: true, onclick: () => void showCoverage() });
+let seenErrorAt = Number(prefs.read('live.errorSeenAt', 0)) || 0;
+const unseenError = () => (collectError && collectError.at > seenErrorAt ? collectError : null);
+const collectErrorButton = el('button', {
+  type: 'button',
+  className: 'link danger',
+  hidden: true,
+  onclick: () => {
+    if (collectError) {
+      seenErrorAt = collectError.at;
+      prefs.write('live.errorSeenAt', seenErrorAt);
+    }
+    renderCollectError();
+    void showCoverage();
+  },
+});
 $('live').after(collectErrorButton);
 function renderCollectError() {
-  collectErrorButton.hidden = !collectError;
-  if (collectError) {
-    collectErrorButton.textContent = t('live.error', { when: relativeWhen(collectError.at) });
-    collectErrorButton.title = [collectError.code, collectError.message, collectError.path].filter(Boolean).join(' · ');
+  const error = unseenError();
+  collectErrorButton.hidden = !error;
+  if (error) {
+    collectErrorButton.textContent = t('live.error', { when: relativeWhen(error.at) });
+    collectErrorButton.title = [[error.code, error.message, error.path].filter(Boolean).join(' · '), t('live.errorAck')].join('\n');
   }
   renderTitle();
 }
@@ -2767,7 +2785,7 @@ let unseenChanges = 0;
 
 function renderTitle() {
   // 멈춤 판정은 상단 표시와 같은 조건이다. 화면과 탭이 다른 말을 하지 않게.
-  const stalled = $('live').dataset.status === 'down' || collectError !== null;
+  const stalled = $('live').dataset.status === 'down' || unseenError() !== null;
   const count = unseenChanges > TITLE_COUNT_CAP ? `${num(TITLE_COUNT_CAP)}+` : num(unseenChanges);
   const marks = [stalled && '⚠', unseenChanges > 0 && `(${count})`].filter(Boolean).join(' ');
   document.title = marks ? `${marks} ${BASE_TITLE}` : BASE_TITLE;
