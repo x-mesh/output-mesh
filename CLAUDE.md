@@ -28,6 +28,7 @@ bun bin/output-mesh.mjs start|stop|restart|status|uninstall
 | `lib/aside-reader.mjs` | Aside `state.db` 읽기 전용 |
 | `lib/cursor-reader.mjs` | Cursor `state.vscdb` 읽기 전용. composer 가 고친 파일 |
 | `lib/claude-desktop-reader.mjs` | Claude 데스크톱 앱의 HTTP 캐시 읽기 전용. 아티팩트 HTML · 채팅이 쓴 파일 · 위젯을 카탈로그 폴더에 옮겨 적는다 |
+| `lib/gemini-reader.mjs` | Gemini Antigravity `brain/<세션>` 읽기 전용. 세션 산출물과 쓰기 도구가 고친 파일의 경로 |
 | `lib/session-logs.mjs` | Codex rollout · Claude Code transcript 에서 쓴 경로 수확 |
 | `lib/collector.mjs` | 스윕 · 보강 · 색인 |
 | `lib/store.mjs` + `schema.sql` | SQLite 인덱스 |
@@ -88,6 +89,11 @@ bun bin/output-mesh.mjs start|stop|restart|status|uninstall
 - **세션 로그와 같은 조건으로 돈다.** 실제 홈의 캐시(실측 18,046개, 837MB)를 훑고 카탈로그 폴더에 쓰기 때문이다. 조건이 없을 때는 `withSessionLogs` 를 끈 워처 테스트가 실제 폴더에 사본을 남겼다.
 - **캐시 폴더는 감시하지 않는다.** 아티팩트와 무관한 응답에도 그 폴더가 바뀌고(실측: 조사하던 10분에 6번, 1시간에 12번), 바뀔 때마다 3초 뒤 모든 수집기가 다시 돈다. 30초 주기 수집이 잡는다.
 - **색은 Claude 색이다.** 다섯째 색을 들이지 않는 이유는 Cursor 와 같다. Claude Code 와 색이 겹치므로 `AGENT_ORDER` 에서 둘 사이에 다른 에이전트를 둔다. 활동이 둘뿐인 기간에는 그래도 붙어 보인다.
+
+**Antigravity 트랜스크립트의 깨진 줄은 수집 에러가 아니다.** 실측 트랜스크립트 464개 중 6개 줄이 JSON 이 아니었다. 모두 앞 줄은 온전한 기록이고 그 줄은 문장 한가운데에서 시작하는 조각이라, 앞 줄과 붙여도 JSON 이 되지 않는다(Antigravity 가 그렇게 쓴 원본이다). 이 줄을 에러로 세면 "수집 에러"가 끝없이 쌓였다. 줄마다 읽은 위치를 메모리에만 두어서 서버를 재시작할 때마다 처음부터 다시 읽고, Antigravity 가 사용 중인 파일을 새로 써도 처음부터 다시 읽기 때문이다(한 시간에 10건).
+
+- **그 줄만 건너뛰고 경고로 남긴다**(`gemini_line_skipped`, 파일 경로와 몇째 줄). 수집 에러(`gemini_entry_invalid`)는 폴더나 파일을 읽지 못했을 때만이다.
+- **같은 줄은 프로세스마다 한 번만 알린다.** 경로 · 줄 번호 · 이유로 기억한다. 재시작하면 경고가 한 번 더 남는다 — 에러가 아니라서 시작 화면의 에러 수에 들지 않는다.
 
 **Codex·Claude Code 는 산출물이 아니라 출처를 준다.** 둘 다 산출물 레코드가 없지만 세션 로그에 쓴 경로가 남는다 — Codex 는 `apply_patch` 본문의 `*** Add/Update File:` 마커(1,236개 중 321개), Claude Code 는 `tool_use` 블록의 `file_path`. 그 경로의 파일은 이미 저장소 안에 있으므로 옮기지 않고 출처만 붙인다. Aside 가 주지 못하는 `workspace` 가 여기서 채워진다. 자동 발견분은 산출물 플래그가 없으므로 절대 `final` 로 올리지 않는다.
 
