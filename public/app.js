@@ -188,6 +188,15 @@ const kindLabel = (value) => tOr(`kind.${value ?? 'unclassified'}`, value);
 // 활동 카드는 수집기 이름을 단다. Aside 가 실어 온 Claude 세션에 Claude 색을 칠하면 수집기를 잘못 말한다.
 const PROVIDER_OF_COLLECTOR = { codex: 'openai-codex', 'claude-code': 'claude-code', cursor: 'cursor', 'claude-app': 'claude-app' };
 const subtitleSource = (source) => tOr(`subtitle.${source}`, '');
+// 같은 회사의 여러 제품(Claude Code, Claude Desktop)을 에이전트 묶기에서 한 계열로 모은다. 계열이 없는 공급자는
+// 자기 이름으로 남는다.
+const FAMILY_OF_PROVIDER = { 'claude-code': 'claude', 'claude-app': 'claude', 'openai-codex': 'codex', cursor: 'cursor', gemini: 'gemini' };
+const FAMILY_LABEL = { claude: 'Claude', codex: 'Codex', gemini: 'Gemini', cursor: 'Cursor' };
+// public/vendor/agent-logos 의 파일 이름. 공식 로고가 없는 공급자(ai-mesh, Aside)는 지금처럼 색 점이다.
+const LOGO_OF_PROVIDER = { 'claude-code': 'claudecode', 'claude-app': 'claude', 'openai-codex': 'codex', cursor: 'cursor', gemini: 'gemini' };
+const LOGO_OF_FAMILY = { claude: 'claude', codex: 'codex', gemini: 'gemini', cursor: 'cursor' };
+const MAX_FOLDER_AGENTS = 4;
+const logo = (name, label) => el('span', { className: 'logo', attrs: { 'data-logo': name, role: 'img', 'aria-label': label, title: label } });
 
 /** 출처에서 파생된 분류. 누르면 그 에이전트로 좁힌다 — 행 선택과 겹치지 않게 전파를 끊는다. */
 function providerChips(providers) {
@@ -670,7 +679,7 @@ function treePlacement(row) {
     };
   }
   return {
-    group: { key: `collector:${row.collector}`, label: collectorLabel(row.collector), icon: 'session' },
+    group: { key: `collector:${row.collector}`, label: collectorLabel(row.collector), icon: 'session', logo: LOGO_OF_PROVIDER[PROVIDER_OF_COLLECTOR[row.collector]] },
     folders: [sessionLabel(row)],
     folderIcon: 'session',
   };
@@ -691,7 +700,7 @@ function buildRepoTree(rows) {
     const place = treePlacement(row);
     let node = groups.get(place.group.key);
     if (!node) {
-      node = folderNode(place.group.key, place.group.label, { icon: place.group.icon, root: true });
+      node = folderNode(place.group.key, place.group.label, { icon: place.group.icon, logo: place.group.logo, root: true });
       groups.set(place.group.key, node);
     }
     for (const name of place.folders) {
@@ -728,7 +737,12 @@ function firstLevel(row) {
   switch (groupBy) {
     case 'provider':
       return row.providers.length
-        ? row.providers.map((p) => ({ key: p, label: PROVIDER_LABEL[p] ?? p, dot: p }))
+        ? row.providers.map((p) => {
+          const family = FAMILY_OF_PROVIDER[p];
+          return family
+            ? { key: `family:${family}`, label: FAMILY_LABEL[family], logo: LOGO_OF_FAMILY[family], provider: p }
+            : { key: p, label: PROVIDER_LABEL[p] ?? p, dot: p };
+        })
         : [{ key: 'unknown', label: t('agent.unknown'), icon: 'session' }];
     case 'collector':
       return (row.collectors?.length ? row.collectors : [row.collector]).map((c) =>
@@ -757,14 +771,37 @@ function buildPivotTree(rows) {
     for (const first of firstLevel(row)) {
       // 펼침 상태가 묶기 방식끼리 섞이지 않게 키에 방식을 붙인다.
       const key = `${groupBy}|${first.key}`;
-      if (!groups.has(key)) groups.set(key, folderNode(key, first.label, { icon: first.icon, dot: first.dot, root: true }));
-      const root = groups.get(key);
-      const placeKey = `${key}/${place.key}`;
-      if (!root.folders.has(placeKey)) root.folders.set(placeKey, folderNode(placeKey, place.label, { icon: place.icon, showDir: true }));
-      root.folders.get(placeKey).files.push(row);
+      if (!groups.has(key)) groups.set(key, folderNode(key, first.label, { icon: first.icon, dot: first.dot, logo: first.logo, root: true }));
+      let parent = groups.get(key);
+      // 계열 아래에 공급자를 한 단 더 둔다(Claude → Claude Code / Claude Desktop). 하나뿐이면 singleProvider 가 접는다.
+      if (first.provider) {
+        const providerKey = `${key}/provider:${first.provider}`;
+        if (!parent.folders.has(providerKey)) {
+          const provider = first.provider;
+          parent.folders.set(providerKey, folderNode(providerKey, PROVIDER_LABEL[provider] ?? provider, LOGO_OF_PROVIDER[provider] ? { logo: LOGO_OF_PROVIDER[provider] } : { dot: provider }));
+        }
+        parent = parent.folders.get(providerKey);
+      }
+      const placeKey = `${parent.key}/${place.key}`;
+      if (!parent.folders.has(placeKey)) parent.folders.set(placeKey, folderNode(placeKey, place.label, { icon: place.icon, showDir: true }));
+      parent.folders.get(placeKey).files.push(row);
     }
   }
-  return [...groups.values()].map(finish).sort(byLatest);
+  return [...groups.values()].map(singleProvider).map(finish).map(distinctCount).sort(byLatest);
+}
+
+/** Codex → Codex 처럼 공급자가 하나뿐인 계열은 가운데 단을 건너뛴다. */
+function singleProvider(root) {
+  const children = [...root.folders.values()];
+  if (children.length === 1 && children[0].key.startsWith(`${root.key}/provider:`)) root.folders = children[0].folders;
+  return root;
+}
+
+/** Claude Code 와 Claude Desktop 이 함께 손댄 파일은 두 갈래에 모두 있다. 계열 묶음의 개수는 파일을 한 번만 센다. */
+const filesUnder = (node) => [...node.files.map((row) => row.id), ...node.children.flatMap(filesUnder)];
+function distinctCount(root) {
+  root.count = new Set(filesUnder(root)).size;
+  return root;
 }
 
 /** 위치로 묶은 파일 줄에는 저장소 안 마지막 폴더를 붙인다. SKILL.md 들이 어느 스킬인지 보이게. */
@@ -794,6 +831,7 @@ function finish(node) {
   node.files.sort(byImportance);
   node.count = node.files.length + children.reduce((sum, child) => sum + child.count, 0);
   node.latest = Math.max(0, ...node.files.map(touchedAt), ...children.map((child) => child.latest));
+  node.agents = new Set([...node.files.flatMap((row) => row.providers ?? []), ...children.flatMap((child) => [...child.agents])]);
   return node;
 }
 
@@ -865,8 +903,9 @@ function appendFolder(list, node, level) {
     onclick: () => toggleFolder(entry),
   },
     icon('chevron', 'chevron'),
-    node.dot ? el('span', { className: 'dot', attrs: { 'data-provider': node.dot } }) : icon(node.icon),
+    node.logo ? logo(node.logo, node.label) : node.dot ? el('span', { className: 'dot', attrs: { 'data-provider': node.dot } }) : icon(node.icon),
     el('span', { className: 'tree-label', title: node.label }, node.label),
+    folderAgents(node),
     el('span', { className: 'tree-count' }, node.count));
   entry.item.style.setProperty('--level', level);
   state.visible.push(entry);
@@ -879,6 +918,23 @@ function appendFolder(list, node, level) {
     else appendFolder(list, child, level + 1);
   }
   for (const row of node.files) appendFile(list, row, level + 1, node.showDir ? dirLeaf(row) : null);
+}
+
+/**
+ * 폴더 안의 파일을 만든 에이전트. 에이전트로 묶은 트리에서는 갈래가 이미 그 말을 하므로 그리지 않고,
+ * 줄 자신의 로고(Claude Desktop 묶음)와 같은 로고도 되풀이하지 않는다. 넘치는 것은 묶음 제목에 이름으로 남긴다.
+ */
+function folderAgents(node) {
+  if (groupBy === 'provider') return null;
+  const agents = [...AGENT_ORDER.filter((p) => node.agents.has(p)), ...[...node.agents].filter((p) => !AGENT_ORDER.includes(p))]
+    .filter((p) => !node.logo || LOGO_OF_PROVIDER[p] !== node.logo);
+  if (agents.length === 0) return null;
+  const names = agents.map((p) => PROVIDER_LABEL[p] ?? p).join(', ');
+  // 화면 읽기에는 묶음이 이름을 한 번만 말한다. 로고마다 이름을 달면 폴더 줄 이름이 로고 수만큼 길어진다.
+  return el('span', { className: 'tree-agents', title: names, attrs: { role: 'img', 'aria-label': names } },
+    ...agents.slice(0, MAX_FOLDER_AGENTS).map((p) => (LOGO_OF_PROVIDER[p]
+      ? el('span', { className: 'logo', attrs: { 'data-logo': LOGO_OF_PROVIDER[p], 'aria-hidden': 'true' } })
+      : el('span', { className: 'dot', attrs: { 'data-provider': p, 'aria-hidden': 'true' } }))));
 }
 
 const listRole = () => (hasQuery() ? 'listbox' : 'tree');

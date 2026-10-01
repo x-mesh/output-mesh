@@ -414,6 +414,20 @@ kbd {
 .tree-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mono-label .tree-label { font-family: var(--mono); font-size: var(--text-xs); font-weight: 400; }
 .tree-count { font-size: var(--text-xs); font-weight: 400; color: var(--text-dim); font-variant-numeric: tabular-nums; }
+/* 에이전트 로고는 이름 바로 옆에 둔다. 이름 칸이 남는 폭을 다 가지면 로고가 개수 쪽으로 밀려 어느 폴더의 것인지 흐려진다. */
+.tree-item.folder .tree-label { flex: 0 1 auto; }
+.tree-item.folder .tree-count { margin-left: auto; }
+.tree-agents { display: inline-flex; align-items: center; gap: 3px; flex-shrink: 0; color: var(--text-dim); }
+.tree-agents .dot { width: 7px; height: 7px; margin: 0 2px; }
+
+/* 에이전트 로고는 SVG 를 마스크로 써서 글자색으로 칠한다. 라이트·다크와 선택 상태를 따로 맞추지 않아도 된다. */
+.logo { width: 14px; height: 14px; flex-shrink: 0; background: currentColor; -webkit-mask: no-repeat center / contain; mask: no-repeat center / contain; }
+.tree-item.folder > .logo { width: 16px; height: 16px; }
+.logo[data-logo="claude"] { -webkit-mask-image: url("/vendor/agent-logos/claude.svg"); mask-image: url("/vendor/agent-logos/claude.svg"); }
+.logo[data-logo="claudecode"] { -webkit-mask-image: url("/vendor/agent-logos/claudecode.svg"); mask-image: url("/vendor/agent-logos/claudecode.svg"); }
+.logo[data-logo="codex"] { -webkit-mask-image: url("/vendor/agent-logos/codex.svg"); mask-image: url("/vendor/agent-logos/codex.svg"); }
+.logo[data-logo="cursor"] { -webkit-mask-image: url("/vendor/agent-logos/cursor.svg"); mask-image: url("/vendor/agent-logos/cursor.svg"); }
+.logo[data-logo="gemini"] { -webkit-mask-image: url("/vendor/agent-logos/gemini.svg"); mask-image: url("/vendor/agent-logos/gemini.svg"); }
 
 /* 파일은 폴더 화살표 자리만큼 들여 아이콘이 폴더 아이콘과 줄을 맞춘다. */
 .tree-item.file { align-items: flex-start; padding-top: 5px; padding-bottom: 5px; padding-left: calc(var(--space-1) + 21px + var(--level) * var(--indent) - var(--indent)); }
