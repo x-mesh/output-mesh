@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { brotliCompressSync, gzipSync } from 'node:zlib';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, unlinkSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { CatalogStore } from '../lib/store.mjs';
@@ -31,6 +31,35 @@ function embeddedGzipCache(url, body) {
   bytes.set(compressed, 24 + keyBytes.length);
   return bytes;
 }
+
+const SIMPLE_EOF = Buffer.from('d8410d97456ffaf4', 'hex');
+function cacheEntry(url, body, headers = {}, status = 200) {
+  const key = encoder.encode('1/0/' + url);
+  const head = Buffer.alloc(24); head.writeUInt32LE(key.length, 12);
+  const http = encoder.encode(['HTTP/1.1 ' + status, ...Object.entries(headers).map(([name, value]) => name + ':' + value)].join('\0') + '\0\0');
+  return Buffer.concat([head, key, Buffer.from(body), SIMPLE_EOF, Buffer.alloc(16), http, SIMPLE_EOF, Buffer.alloc(16)]);
+}
+
+const ORG = '3a7f0c1e-9b2d-4c5e-8f1a-2b3c4d5e6f70';
+const CONV = '2b7e1516-28ae-4d2a-a6ab-f7158809cf4f';
+const conversationUrl = (consistency) => `https://claude.ai/api/organizations/${ORG}/chat_conversations/${CONV}?tree=True&rendering_mode=messages&render_all_tools=true&consistency=${consistency}`;
+const downloadUrl = (path) => `https://claude.ai/api/organizations/${ORG}/conversations/${CONV}/wiggle/download-file?path=${encodeURIComponent(path)}`;
+const tool = (name, input) => ({ type: 'tool_use', name, input });
+const message = (uuid, parent, at, content) => ({ uuid, parent_message_uuid: parent, created_at: at, sender: 'assistant', content });
+const conversation = (updatedAt, planText) => ({
+  uuid: CONV, name: 'Weekly plan', updated_at: updatedAt, current_leaf_message_uuid: 'm3',
+  chat_messages: [
+    message('m1', '00000000-0000-4000-8000-000000000000', '2026-09-30T09:00:00Z', [tool('create_file', { path: '/mnt/user-data/outputs/plan.md', file_text: planText })]),
+    message('m2', 'm1', '2026-09-30T09:10:00Z', [
+      tool('str_replace', { path: '/mnt/user-data/outputs/plan.md', old_str: 'old line', new_str: 'new line' }),
+      tool('create_file', { path: '/home/claude/scratch.py', file_text: 'print(1)' }),
+      tool('create_file', { path: '/mnt/user-data/outputs/../escape.md', file_text: 'escape' }),
+    ]),
+    message('m2b', 'm1', '2026-09-30T09:05:00Z', [tool('create_file', { path: '/mnt/user-data/outputs/abandoned.md', file_text: 'abandoned branch' })]),
+    message('m3', 'm2', '2026-09-30T09:20:00Z', [tool('visualize:show_widget', { title: 'Flow: A/B', widget_code: '<svg><text>flow</text></svg>' })]),
+  ],
+});
+const listFiles = (root) => readdirSync(root, { recursive: true }).filter((name) => statSync(join(root, name)).isFile()).sort();
 
 let dir;
 let store;
@@ -129,6 +158,58 @@ describe('Claude Desktop local cache reader', () => {
     expect(timerFired).toBe(true);
     await reader.sweep(store);
     expect(store.getState('claude.last_sweep_code')).toBe('entry_invalid');
+  });
+
+  test('rebuilds files and widgets from the visible branch of the newest cached conversation', async () => {
+    const cache = join(dir, 'Cache_Data'); const output = join(dir, 'managed'); mkdirSync(cache);
+    writeFileSync(join(cache, 'stale'), cacheEntry(conversationUrl('eventual'), brotliCompressSync(JSON.stringify(conversation('2026-09-30T08:00:00Z', '# Stale\n'))), { 'content-encoding': 'br' }));
+    writeFileSync(join(cache, 'fresh'), cacheEntry(conversationUrl('strong'), brotliCompressSync(JSON.stringify(conversation('2026-09-30T10:00:00Z', '# Plan\nold line\n'))), { 'content-encoding': 'br' }));
+    const stats = await new ClaudeDesktopReader({ cacheDataRoot: cache, outputDir: output }).sweep(store);
+    expect(stats).toMatchObject({ inserted: 2, failed: 0, kinds: { file: 1, widget: 1 } });
+    expect(listFiles(output)).toEqual([CONV + '/plan.md', CONV + '/widgets/Flow A B.html']);
+    expect(readFileSync(join(output, CONV, 'plan.md'), 'utf8')).toBe('# Plan\nnew line\n');
+    const widget = readFileSync(join(output, CONV, 'widgets', 'Flow A B.html'), 'utf8');
+    expect(widget).toContain('<title>Flow: A/B</title>');
+    expect(widget).toContain('<svg><text>flow</text></svg>');
+    expect(store.db.query('SELECT DISTINCT collector, session_ref, session_title FROM artifact_origins').all()).toEqual([{ collector: 'claude-app', session_ref: CONV, session_title: 'Weekly plan' }]);
+    expect(store.getState('claude.last_sweep_code')).toBe('ok');
+  });
+
+  test('prefers downloaded bytes and refuses a download whose length does not match', async () => {
+    const cache = join(dir, 'Cache_Data'); const output = join(dir, 'managed'); mkdirSync(cache);
+    writeFileSync(join(cache, 'conversation'), cacheEntry(conversationUrl('strong'), JSON.stringify(conversation('2026-09-30T10:00:00Z', '# Plan\nold line\n'))));
+    writeFileSync(join(cache, 'plan'), cacheEntry(downloadUrl('/mnt/user-data/outputs/plan.md'), 'downloaded plan', { 'content-length': '15' }));
+    const archive = gzipSync('raw archive');
+    writeFileSync(join(cache, 'archive'), cacheEntry(downloadUrl('/mnt/user-data/outputs/data/archive.gz'), archive, { 'content-length': String(archive.length) }));
+    writeFileSync(join(cache, 'cut'), cacheEntry(downloadUrl('/mnt/user-data/outputs/cut.md'), 'partial', { 'content-length': '999' }));
+    const stats = await new ClaudeDesktopReader({ cacheDataRoot: cache, outputDir: output }).sweep(store);
+    expect(stats.kinds).toEqual({ download: 2, widget: 1 });
+    expect(readFileSync(join(output, CONV, 'plan.md'), 'utf8')).toBe('downloaded plan');
+    expect(Buffer.from(readFileSync(join(output, CONV, 'data', 'archive.gz'))).equals(Buffer.from(archive))).toBe(true);
+    expect(listFiles(output)).not.toContain(CONV + '/cut.md');
+    expect(store.getState('claude.last_sweep_code')).toBe('entry_invalid');
+  });
+
+  test('keeps the rebuilt file when the conversation edited it after the download', async () => {
+    const cache = join(dir, 'Cache_Data'); const output = join(dir, 'managed'); mkdirSync(cache);
+    writeFileSync(join(cache, 'conversation'), cacheEntry(conversationUrl('strong'), JSON.stringify(conversation('2026-09-30T10:00:00Z', '# Plan\nold line\n'))));
+    const download = join(cache, 'plan');
+    writeFileSync(download, cacheEntry(downloadUrl('/mnt/user-data/outputs/plan.md'), '# Plan\nold line\n', { 'content-length': String(Buffer.byteLength('# Plan\nold line\n')) }));
+    const beforeEdit = new Date('2026-09-30T09:05:00Z');
+    utimesSync(download, beforeEdit, beforeEdit);
+    const stats = await new ClaudeDesktopReader({ cacheDataRoot: cache, outputDir: output }).sweep(store);
+    expect(stats.kinds).toEqual({ file: 1, widget: 1 });
+    expect(readFileSync(join(output, CONV, 'plan.md'), 'utf8')).toBe('# Plan\nnew line\n');
+  });
+
+  test('ignores frame subresources, cached 404s, and finds the metadata uuid behind a named identifier', async () => {
+    const cache = join(dir, 'Cache_Data'); mkdirSync(cache);
+    writeFileSync(join(cache, 'runtime'), cacheEntry('https://' + UUID + '.frame.claudeusercontent.com/_runtime/room.js', 'export {}', { 'content-type': 'text/javascript' }));
+    writeFileSync(join(cache, 'deleted'), cacheEntry(conversationUrl('strong'), JSON.stringify({ type: 'error', error: { type: 'not_found_error' } }), {}, 404));
+    expect((await new ClaudeDesktopReader({ cacheDataRoot: cache, outputDir: join(dir, 'managed') }).sweep(store)).found).toBe(0);
+    expect(store.getState('claude.last_sweep_code')).toBe('ok');
+    const metadata = parseClaudeCacheEntry(envelope('https://claude.ai/api/user_artifacts', JSON.stringify({ artifacts: [{ uuid: UUID, artifact_identifier: 'deck-detail', title: 'Deck' }] })));
+    expect(metadata.records).toEqual([expect.objectContaining({ uuid: UUID, title: 'Deck' })]);
   });
 
   test('keeps an invalid-entry state when no artifact is readable', async () => {
