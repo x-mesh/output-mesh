@@ -196,6 +196,7 @@ const FAMILY_LABEL = { claude: 'Claude', codex: 'Codex', gemini: 'Gemini', curso
 const LOGO_OF_PROVIDER = { 'claude-code': 'claudecode', 'claude-app': 'claude', 'openai-codex': 'codex', cursor: 'cursor', gemini: 'gemini' };
 const LOGO_OF_FAMILY = { claude: 'claude', codex: 'codex', gemini: 'gemini', cursor: 'cursor' };
 const MAX_FOLDER_AGENTS = 4;
+const FILTER_PANEL_GAP = 4;
 // 아이콘처럼 장식이다. 이름은 옆의 글자나 묶음의 aria-label 이 말한다 — 로고에도 달면 같은 이름을 두 번 읽는다.
 const logo = (name) => el('span', { className: 'logo', attrs: { 'data-logo': name, 'aria-hidden': 'true' } });
 
@@ -458,12 +459,7 @@ function renderActiveFilters() {
       type: 'button',
       className: 'token',
       title: t('filter.clearOne'),
-      // summary 안의 버튼이라 기본 동작이 패널을 여닫는다. 토큰은 필터만 지운다.
-      onclick: (event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        toggleFilter(key, value);
-      },
+      onclick: () => toggleFilter(key, value),
     }, filterDisplay(key, value), el('span', { className: 'token-x', attrs: { 'aria-hidden': 'true' } }, '×')));
   $('active-filters').replaceChildren(...tokens);
 }
@@ -550,15 +546,15 @@ function renderFilters(data) {
 
   const favorite = state.mode === 'library' && el('button', {
     type: 'button',
-    className: 'facet',
-    attrs: { 'aria-pressed': String(Boolean(state.filters.favorite)) },
+    className: 'facet facet-favorite',
+    attrs: { 'aria-pressed': String(Boolean(state.filters.favorite)), 'data-facet': 'favorite' },
     onclick: () => toggleFilter('favorite', true),
   }, el('span', { className: 'facet-name' }, t('facet.favoritesOnly')));
 
   const sections = groups.filter(([, , items]) => items?.length).map(([key, label, items]) => {
     const active = state.filters[key];
     const group = el('details', { className: 'facet-group', open: Boolean(facetOpen[key] || active) },
-      el('summary', {}, icon('chevron', 'chevron'), el('span', {}, label),
+      el('summary', { attrs: { 'data-facet': `group:${key}` } }, icon('chevron', 'chevron'), el('span', {}, label),
         active !== undefined && el('span', { className: 'facet-active' }, filterDisplay(key, active).replace(/^[^:]+: /, ''))),
       ...items.filter((item) => item.value).map((item) => {
         // 라이브러리에서 코드는 목록에 없다. 같은 모양으로 두면 고친 걸로 읽히지 않는다.
@@ -567,7 +563,7 @@ function renderFilters(data) {
           type: 'button',
           className: `facet${outOfScope ? ' out-of-scope' : ''}`,
           title: outOfScope ? t('facet.outOfScopeTitle') : String(item.value),
-          attrs: { 'aria-pressed': String(active === item.value) },
+          attrs: { 'aria-pressed': String(active === item.value), 'data-facet': `${key}:${item.value}` },
           onclick: () => toggleFilter(key, item.value),
         },
           el('span', { className: 'facet-name' }, item.display ?? item.value),
@@ -581,7 +577,10 @@ function renderFilters(data) {
     return group;
   });
 
+  // 필터를 고를 때마다 목록을 통째로 다시 그린다. 패널 안에서 고르던 키보드 초점이 사라지지 않게 같은 항목으로 되돌린다.
+  const focused = $('facets').contains(document.activeElement) ? document.activeElement.dataset.facet : null;
   $('facets').replaceChildren(...keep([favorite, ...sections]));
+  if (focused) $('facets').querySelector(`[data-facet="${CSS.escape(focused)}"]`)?.focus();
   renderActiveFilters();
 
   const outside = state.mode === 'library' && !state.filters.kind
@@ -593,9 +592,9 @@ function renderFilters(data) {
         className: 'link quiet-link',
         title: t('facet.outsideTitle'),
         onclick: () => {
-          $('filters').open = true;
           facetOpen.kind = true;
           renderFilters(state.facets);
+          openFilters();
         },
       }, t('facet.outsideCount', { n: outside }))
     : '');
@@ -2057,7 +2056,8 @@ function dashboard() {
     el('p', { className: 'keys' },
       el('span', {}, kbd('↑'), kbd('↓'), ` ${t('keys.move')}`),
       el('span', {}, kbd('←'), kbd('→'), ` ${t('keys.fold')}`),
-      el('span', {}, kbd('/'), ` ${t('keys.search')}`)));
+      el('span', {}, kbd('/'), ` ${t('keys.search')}`),
+      el('span', {}, kbd('f'), ` ${t('keys.filters')}`)));
 }
 
 // ── 개요: 활동 그래프 ───────────────────────────────────────────────────
@@ -2302,9 +2302,9 @@ function distKinds() {
       type: 'button',
       className: 'link quiet-link dist-note',
       onclick: () => {
-        $('filters').open = true;
         facetOpen.kind = true;
         renderFilters(state.facets);
+        openFilters();
       },
     }, t('dist.outside', { n: outside })),
   });
@@ -2553,8 +2553,70 @@ $('collapse-all').addEventListener('click', collapseAll);
 $('mode-library').addEventListener('click', () => setMode('library'));
 $('mode-activity').addEventListener('click', () => setMode('activity'));
 
-$('filters').open = prefs.read('filters.open', false);
-$('filters').addEventListener('toggle', () => prefs.write('filters.open', $('filters').open));
+// ── 필터 패널 ─────────────────────────────────────────────────────────────
+// 필터는 사이드바 안에서 펼치지 않고 버튼 아래 패널로 띄운다. 펼치면 연 만큼 트리가 밀려났다.
+// 고른 값은 버튼 옆 토큰 한 줄에 남으므로 패널을 닫아도 무엇이 걸러졌는지 보인다.
+
+function openFilters() {
+  if (!$('facets').matches(':popover-open')) $('facets').showPopover();
+}
+
+/** 패널은 최상위 층에 떠서 사이드바 흐름과 무관하다. 버튼 바로 아래에 두되 화면 밖으로 나가지 않게 한다. */
+function placeFilters() {
+  const anchor = $('filters-button').getBoundingClientRect();
+  const panel = $('facets');
+  panel.style.top = `${anchor.bottom + FILTER_PANEL_GAP}px`;
+  const width = panel.getBoundingClientRect().width;
+  panel.style.left = `${Math.max(FILTER_PANEL_GAP, Math.min(anchor.left, innerWidth - width - FILTER_PANEL_GAP))}px`;
+}
+
+$('facets').addEventListener('beforetoggle', (event) => {
+  // 열리기 전에 자리를 잡아 둔다. 그러지 않으면 한 번 화면 가운데에 그려졌다가 옮겨진다.
+  if (event.newState === 'open') {
+    const anchor = $('filters-button').getBoundingClientRect();
+    $('facets').style.top = `${anchor.bottom + FILTER_PANEL_GAP}px`;
+    $('facets').style.left = `${anchor.left}px`;
+  }
+});
+$('facets').addEventListener('toggle', (event) => {
+  const open = event.newState === 'open';
+  $('filters-button').setAttribute('aria-expanded', String(open));
+  if (open) {
+    placeFilters();
+    ($('facets').querySelector('[aria-pressed="true"]') ?? $('facets').querySelector('button, summary'))?.focus();
+  } else if ($('facets').contains(document.activeElement)) {
+    // Esc 로 닫으면 초점이 숨은 패널 안에 남는다. 다른 곳을 눌러 닫은 경우에는 초점이 이미 그쪽에 있으니 두고, 이때만 버튼으로 돌린다.
+    $('filters-button').focus();
+  }
+});
+window.addEventListener('resize', () => {
+  if ($('facets').matches(':popover-open')) placeFilters();
+});
+
+/** 위아래는 보이는 항목 사이를, 좌우는 묶음 머리 사이를 옮겨 다닌다. 패널이 여러 열로 놓여서다. */
+$('facets').addEventListener('keydown', (event) => {
+  if (!['ArrowDown', 'ArrowUp', 'ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+  // 접힌 묶음 안의 항목도 레이아웃 크기는 가져서 화면 크기로는 가려지지 않는다. 그런 항목은 초점을 받지 못한다.
+  const reachable = (node) => node.tagName === 'SUMMARY' || !node.closest('details') || node.closest('details').open;
+  const items = [...$('facets').querySelectorAll('button, summary')].filter(reachable);
+  const heads = items.filter((node) => node.tagName === 'SUMMARY' || node.dataset.facet === 'favorite');
+  const step = (list, delta) => {
+    const at = list.indexOf(document.activeElement);
+    const here = at >= 0 ? at : list.findLastIndex((node) => node.compareDocumentPosition(document.activeElement) & Node.DOCUMENT_POSITION_FOLLOWING);
+    return list[Math.max(0, Math.min(list.length - 1, here + delta))];
+  };
+  const target = {
+    ArrowDown: () => step(items, 1),
+    ArrowUp: () => step(items, -1),
+    ArrowRight: () => step(heads, 1),
+    ArrowLeft: () => step(heads, -1),
+    Home: () => items[0],
+    End: () => items.at(-1),
+  }[event.key]();
+  if (!target) return;
+  event.preventDefault();
+  target.focus();
+});
 
 document.addEventListener('keydown', (event) => {
   if (event.metaKey || event.ctrlKey || event.altKey) return;
@@ -2565,6 +2627,13 @@ document.addEventListener('keydown', (event) => {
     return;
   }
   if (typing) return;
+  // 패널 안에서는 Esc 가 패널을 닫고 방향키가 항목을 옮긴다. 여기서 받으면 초점이 검색창이나 트리로 튄다.
+  if ($('facets').contains(event.target)) return;
+  if (event.key === 'f') {
+    event.preventDefault();
+    openFilters();
+    return;
+  }
   if (event.key === '/' || event.key === 'Escape') {
     event.preventDefault();
     $('q').focus();
