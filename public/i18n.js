@@ -176,7 +176,7 @@
       'home.moveUp': '위로', 'home.moveDown': '아래로', 'home.drag': '끌어서 순서 바꾸기',
       'home.blocksOff': '개요 위젯을 모두 껐습니다.', 'home.blocksRestore': '기본 구성으로',
       'home.resetLayout': '기본 배치로',
-      'keys.move': '이동', 'keys.fold': '접기 · 펼치기', 'keys.search': '검색', 'keys.filters': '필터',
+      'keys.move': '이동', 'keys.fold': '접기 · 펼치기', 'keys.search': '검색', 'keys.filters': '필터', 'keys.explorer': '탐색기 숨기기 · 보이기', 'explorer.hide': '탐색기 숨기기', 'explorer.show': '탐색기 보이기',
 
       'chart.title': ({ period }) => `${period} · 에이전트가 쓴 산출물`,
       'chart.empty': ({ period }) => `${period} 에이전트가 쓴 산출물이 없습니다.`,
@@ -365,7 +365,7 @@
       'home.moveUp': 'Move up', 'home.moveDown': 'Move down', 'home.drag': 'Drag to reorder',
       'home.blocksOff': 'All overview blocks are hidden.', 'home.blocksRestore': 'Restore defaults',
       'home.resetLayout': 'Reset layout',
-      'keys.move': 'move', 'keys.fold': 'collapse · expand', 'keys.search': 'search', 'keys.filters': 'filters',
+      'keys.move': 'move', 'keys.fold': 'collapse · expand', 'keys.search': 'search', 'keys.filters': 'filters', 'keys.explorer': 'hide · show explorer', 'explorer.hide': 'Hide explorer', 'explorer.show': 'Show explorer',
 
       'chart.title': ({ period }) => `${period} · Artifacts written by agents`,
       'chart.empty': ({ period }) => `No artifacts written by agents ${period}.`,

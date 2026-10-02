@@ -175,6 +175,7 @@ const ICONS = {
   app: 'M3 3h4v4H3zM9 3h4v4H9zM3 9h4v4H3zM9 9h4v4H9z',
   date: 'M2.5 4h11v9.5h-11zM2.5 7h11M5.5 2.5v3M10.5 2.5v3',
   panel: 'M2.5 3h11v10h-11zM10 3v10',
+  sidebar: 'M2.5 3h11v10h-11zM6 3v10',
   sun: 'M8 5.25a2.75 2.75 0 1 0 0 5.5a2.75 2.75 0 1 0 0-5.5zM8 1.75v1.5M8 12.75v1.5M1.75 8h1.5M12.75 8h1.5M3.6 3.6l1.05 1.05M11.35 11.35l1.05 1.05M3.6 12.4l1.05-1.05M11.35 4.65l1.05-1.05',
   moon: 'M13.25 9.6A5.5 5.5 0 0 1 6.4 2.75a5.5 5.5 0 1 0 6.85 6.85z',
   auto: 'M8 2.5a5.5 5.5 0 1 0 0 11a5.5 5.5 0 1 0 0-11zM8 2.5v11M8 5l3.2-1.6M8 8h5.4M8 11l3.2 1.6',
@@ -442,7 +443,37 @@ function setPeriod(period) {
  */
 function updateWide() {
   $('layout').toggleAttribute('data-wide', state.mode === 'activity' && state.view === 'home');
+  renderExplorerToggle();
 }
+
+/**
+ * 탐색기를 숨겨 미리보기와 개요를 넓게 본다. 활동 보기의 넓은 타임라인은 탐색기 자리 자체라 숨기지 않는다 —
+ * 숨기면 빈 화면이 남는다. 그동안 버튼은 꺼 두고, 고른 값은 그대로 기억했다가 돌아오면 다시 적용한다.
+ */
+let explorerHidden = prefs.read('explorer.hidden', false) === true;
+
+function renderExplorerToggle() {
+  const wide = $('layout').hasAttribute('data-wide');
+  $('layout').toggleAttribute('data-explorer-hidden', explorerHidden && !wide);
+  const button = $('explorer-toggle');
+  const label = t(explorerHidden ? 'explorer.show' : 'explorer.hide');
+  button.disabled = wide;
+  button.title = `${label} ([)`;
+  button.setAttribute('aria-label', label);
+  button.setAttribute('aria-expanded', String(!explorerHidden || wide));
+}
+
+function setExplorerHidden(hidden) {
+  if ($('layout').hasAttribute('data-wide') || hidden === explorerHidden) return;
+  explorerHidden = hidden;
+  prefs.write('explorer.hidden', hidden);
+  // 숨기는 탐색기 안에 초점이 있으면 보이지 않는 곳에 남는다.
+  if (hidden && $('explorer').contains(document.activeElement)) $('explorer-toggle').focus();
+  renderExplorerToggle();
+}
+
+$('explorer-toggle').append(icon('sidebar'));
+$('explorer-toggle').addEventListener('click', () => setExplorerHidden(!explorerHidden));
 
 function setModeState(mode) {
   state.mode = mode;
@@ -2244,7 +2275,8 @@ function dashboard() {
       el('span', {}, kbd('↑'), kbd('↓'), ` ${t('keys.move')}`),
       el('span', {}, kbd('←'), kbd('→'), ` ${t('keys.fold')}`),
       el('span', {}, kbd('/'), ` ${t('keys.search')}`),
-      el('span', {}, kbd('f'), ` ${t('keys.filters')}`)));
+      el('span', {}, kbd('f'), ` ${t('keys.filters')}`),
+      el('span', {}, kbd('['), ` ${t('keys.explorer')}`)));
 }
 
 // ── 개요: 활동 그래프 ───────────────────────────────────────────────────
@@ -3069,12 +3101,19 @@ document.addEventListener('keydown', (event) => {
   if (typing) return;
   // 패널 안에서는 Esc 가 패널을 닫고 방향키가 항목을 옮긴다. 여기서 받으면 초점이 검색창이나 트리로 튄다.
   if ($('facets').contains(event.target)) return;
+  if (event.key === '[') {
+    event.preventDefault();
+    setExplorerHidden(!explorerHidden);
+    return;
+  }
+  // 검색창과 필터는 탐색기 안에 있다. 숨겨 둔 채 부르면 보이지 않는 곳에 초점이 간다.
+  if (event.key === 'f' || event.key === '/') setExplorerHidden(false);
   if (event.key === 'f') {
     event.preventDefault();
     openFilters();
     return;
   }
-  if (event.key === '/' || event.key === 'Escape') {
+  if (event.key === '/' || (event.key === 'Escape' && !explorerHidden)) {
     event.preventDefault();
     $('q').focus();
     $('q').select();
@@ -3084,7 +3123,7 @@ document.addEventListener('keydown', (event) => {
   if (state.mode === 'activity') {
     event.preventDefault();
     move(event.key === 'ArrowDown' ? 1 : -1);
-  } else if (!$('rows').contains(event.target)) {
+  } else if (!$('rows').contains(event.target) && !explorerHidden) {
     event.preventDefault();
     focusTree();
   }

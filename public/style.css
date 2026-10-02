@@ -273,6 +273,10 @@ kbd {
 /* 활동 보기는 고른 파일이 없으면 화면 전체를 쓴다(app.js 의 updateWide). 같은 목록이 폭만 달라진다.
    조작(기간 · 필터)은 제 폭을 지키고 타임라인만 넓어진다. */
 .layout[data-wide] { grid-template-columns: minmax(0, 1fr) 0 0; }
+/* 탐색기를 숨기면 본문이 폭 전체를 쓴다. 넓은 타임라인일 때는 app.js 가 이 속성을 달지 않는다.
+   칸은 하나다 — display: none 인 탐색기와 경계선은 칸을 차지하지 않아, 세 칸을 두면 본문이 폭 0 인 첫 칸에 앉는다. */
+.layout[data-explorer-hidden] { grid-template-columns: minmax(0, 1fr); }
+.layout[data-explorer-hidden] .explorer, .layout[data-explorer-hidden] .resizer { display: none; }
 .layout[data-wide] .content, .layout[data-wide] .resizer { display: none; }
 .layout[data-wide] .explorer { background: var(--bg); border-right: none; padding: var(--space-3) var(--space-5) 0; }
 .layout[data-wide] .explorer > :not(.tree) { width: 100%; max-width: var(--explorer-width, 340px); }
@@ -407,6 +411,7 @@ kbd {
 }
 .explorer-head .icon-button { width: 22px; min-height: 22px; }
 .explorer-foot #out-of-scope { margin-right: auto; }
+.explorer-foot > * { white-space: nowrap; }
 .version { font-family: var(--mono); font-size: var(--text-xs); color: var(--text-dim); white-space: nowrap; }
 .explorer-head #summary { margin-right: auto; }
 .group-by { display: inline-flex; align-items: center; gap: var(--space-1); margin-right: var(--space-1); }
@@ -419,8 +424,9 @@ kbd {
 .group-by select:focus-visible { outline: 2px solid var(--accent); outline-offset: -1px; }
 .dot { width: 8px; height: 8px; margin: 0 4px; flex-shrink: 0; border-radius: 50%; background: var(--series, var(--aside)); }
 
+/* 항목이 늘면 칸 안에서 접히지 않고 다음 줄로 넘어간다. 한 항목이 세 줄로 접혀 줄 높이가 들쭉날쭉했다. */
 .explorer-foot {
-  display: flex; align-items: center; gap: var(--space-3);
+  display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-3);
   padding: var(--space-2) var(--space-3);
   border-top: 1px solid var(--border);
   font-size: var(--text-xs);
@@ -691,8 +697,8 @@ embed.preview-fill { height: 100%; }
 .keys { display: flex; flex-wrap: wrap; gap: var(--space-4); margin: 0; font-size: var(--text-sm); color: var(--text-dim); }
 
 .dash {
-  overflow-y: auto; padding: var(--space-6);
-  display: grid; gap: var(--space-6); align-content: start;
+  overflow-y: auto; padding: var(--space-5) var(--space-4);
+  display: grid; gap: var(--space-3); align-content: start;
   transition: opacity var(--fast) var(--ease-out);
 }
 /* 그리드 칸은 기본으로 내용의 최소 폭 밑으로 줄지 않는다. 그래프 SVG 의 고정 폭이 칸을 붙잡아
@@ -966,6 +972,7 @@ dialog::backdrop { background: rgba(0, 0, 0, .35); }
   .layout { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 42vh) minmax(0, 1fr); }
   .explorer { border-right: none; border-bottom: 1px solid var(--border); }
   .resizer { display: none; }
+  .layout[data-explorer-hidden] { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); }
   .stats { display: none; }
   .doc-head { padding: var(--space-3) var(--space-4); }
 }

@@ -10,6 +10,7 @@
 </head>
 <body>
 <header class="topbar">
+  <button id="explorer-toggle" type="button" class="icon-button explorer-toggle" aria-controls="explorer" aria-expanded="true"></button>
   <h1><button id="home" type="button" class="brand" data-i18n-attr="title:brand.home">Output Mesh</button></h1>
   <div id="nodes" class="nodes" hidden></div>
   <div class="modes" role="tablist" data-i18n-attr="aria-label:aria.modes">
@@ -24,7 +25,7 @@
 </header>
 
 <main id="layout" class="layout">
-  <nav class="explorer" data-i18n-attr="aria-label:aria.explorer">
+  <nav id="explorer" class="explorer" data-i18n-attr="aria-label:aria.explorer">
     <div class="explorer-search">
       <input id="q" type="search" autocomplete="off" spellcheck="false" aria-describedby="hint" data-i18n-attr="placeholder:search.placeholder">
       <span id="hint" class="hint"></span>

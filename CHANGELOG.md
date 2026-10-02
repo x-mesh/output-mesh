@@ -8,6 +8,18 @@ lives in `package.json`; `output-mesh --version` and the explorer footer show it
 
 ## [Unreleased]
 
+### Added
+
+- **ui:** a button left of the title, or the `[` key, hides the explorer so the preview and the overview use the full width. The choice is remembered; the Activity timeline keeps the explorer because it is the timeline.
+
+### Fixed
+
+- **ui:** the explorer footer wraps whole items onto a second line instead of squeezing one item into three lines.
+
+### Changed
+
+- **ui:** the overview has less side padding and a smaller gap between its header and the widgets.
+
 ## [0.11.0] - 2026-10-02
 
 ### Added
