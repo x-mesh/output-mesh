@@ -6,7 +6,7 @@
 
 <p align="center">
   A local catalog of the files that your AI agents make.<br />
-  Find an artifact in seconds, preview it safely, and see the agent and the session that wrote it.
+  Search them by name, content, or the task that made them, preview them in a sandbox, and see which agent and session wrote each one.
 </p>
 
 <p align="center">
@@ -16,11 +16,9 @@
   <img src="https://img.shields.io/badge/runtime%20deps-0-brightgreen" alt="Zero runtime dependencies" />
 </p>
 
-## Why
-
 Agents write reports, PRDs, spreadsheets, HTML prototypes, and images into session folders and repositories. A week later, you remember the task, but not the file name or the location. Many files also have the same name, for example `README.md` or `SKILL.md`.
 
-output-mesh reads those locations **and never changes them**. It puts the files into one library. You can search by file name, by body text, and by the task that made the file. Each file shows the agent, the session, and the repository that it came from.
+output-mesh reads those places **without changing them** and gathers the files into one library. Search by file name, body text, or the task that made a file. Each file shows the agent, the session, and the repository that it came from.
 
 <p align="center">
   <img src="./assets/demo.gif" alt="output-mesh: browse the library, open an artifact with the agent and the session that made it, search by task, and see a new file appear live" width="900" />
@@ -36,15 +34,17 @@ You need macOS and [Bun](https://bun.sh) 1.3 or later. You do not need to instal
 bunx output-mesh
 ```
 
-Then open http://127.0.0.1:19843.
-
-Bun keeps the downloaded package, so the next start is fast. To get a new release, run `bunx output-mesh@latest`. When a newer version exists, the startup screen shows an `Update` line. To check for it, output-mesh sends one request to the npm registry and sends no data about you. To turn this off, set `OUTPUT_MESH_NO_UPDATE_CHECK=1`. To get the latest commit on `main`, run `bunx github:x-mesh/output-mesh`.
-
-The first run reads all agent logs once and shows the progress. Later starts read only the changes.
+Then open http://127.0.0.1:19843. The first run reads all agent logs once and shows the progress. Later starts read only the changes.
 
 The interface is in English and Korean, and it follows your browser language. To change the language, click `KO` or `EN` in the top bar. The startup screen and the command help are in English.
 
-`npx` does not work, because output-mesh uses the SQLite module that is part of Bun. To run output-mesh from a checkout:
+### Other ways to run it
+
+- `bunx output-mesh@latest` gets a new release. Bun keeps the downloaded package, so later starts are fast. When a newer version exists, the startup screen shows an `Update` line.
+- `bunx github:x-mesh/output-mesh` runs the latest commit on `main`.
+- `npx` does not work, because output-mesh uses the SQLite module that is part of Bun.
+
+To run output-mesh from a checkout:
 
 ```bash
 git clone https://github.com/x-mesh/output-mesh.git
@@ -71,7 +71,7 @@ On macOS, `install` adds a LaunchAgent. On Linux, it adds a systemd user unit. U
 |---|---|---|
 | Aside | `~/.aside/u/<account>/sessions/<date>_<id>/artifacts/` | Watches the folder. Reads more data from Aside's `state.db` in read-only mode |
 | Codex | `~/.codex/sessions/**/rollout-*.jsonl` and `~/.codex/generated_images/` | Paths from the `apply_patch` markers in session logs, and the images that the Codex image tool made |
-| Claude Code | `~/.claude/projects/**/*.jsonl` and the session scratch folders in `/private/tmp/claude-<uid>/` | The `file_path` of `Write` and `Edit` tool calls, and the images in the scratch folders |
+| Claude Code | `~/.claude/projects/**/*.jsonl` and the session scratch folders in `/private/tmp/claude-<uid>/` | The `file_path` of `Write`, `Edit`, `MultiEdit`, and `NotebookEdit` tool calls, and the images in the scratch folders |
 | Claude Desktop | `~/Library/Application Support/Claude/Cache/Cache_Data/` | Artifact HTML, files that chats wrote, and chat widgets from the local cache |
 | Gemini Antigravity | `~/.gemini/{antigravity,antigravity-cli,antigravity-ide}/brain/` | Local session artifacts and the paths from write tool calls |
 | Cursor | `~/Library/Application Support/Cursor/.../state.vscdb` | Files that a composer changed or created. Opens the database in read-only mode |
@@ -80,7 +80,11 @@ On macOS, `install` adds a LaunchAgent. On Linux, it adds a systemd user unit. U
 
 Codex and Claude Code do not keep artifacts in a special folder. But their logs record the paths that they wrote. output-mesh adds the agent and the session to the files that are still in your repositories. The files stay where they are.
 
+### What the library shows
+
 The library shows documents, web pages, images, spreadsheets, and project folders. output-mesh also collects source code, agent notes, and other formats, but the library hides them. Agent notes are the memory files that Claude Code keeps in `~/.claude/projects/*/memory/`. To see a hidden kind, select it in the Kind filter. The "Recent changes" feed hides the same kinds and shows how many it hid.
+
+### Claude Desktop
 
 Claude Desktop collection reads only the local Chromium HTTP cache. It does not call private Claude APIs or sync WebSockets. It collects three types of content:
 
@@ -90,11 +94,23 @@ Claude Desktop collection reads only the local Chromium HTTP cache. It does not 
 
 The cache keeps only the conversations that you opened in Claude Desktop. output-mesh keeps a copy of each file that it collects, so the file stays in the catalog after the cache deletes it. If Claude Desktop changes its private cache format, this source can stop.
 
+### Gemini Antigravity
+
 Gemini collection reads only local data from Antigravity, Antigravity CLI, and Antigravity IDE. It collects session artifacts and the current files that `write_to_file` or `replace_file_content` changed. It does not collect scratch files, uploads, generated internal files, metadata, `.resolved` revisions, backups, Gemini web Canvas, or downloaded images. It does not read Gemini account files or send requests to Gemini services. If a repository file no longer exists, output-mesh does not collect it.
 
 Some lines in Antigravity transcripts are not valid JSON. output-mesh skips each of these lines and records one warning for it. A warning is not a collection error.
 
-output-mesh counts a git worktree as part of its main repository. The tree shows each worktree as a `⑂ name` group below that repository. If an agent worked in a repository, output-mesh also watches all worktrees of that repository. When it reads a worktree for the first time, it collects only the documents that changed after git created the worktree. The other files are copies from the checkout. From the temporary session folders of Claude Code (`/private/tmp/claude-*/`), output-mesh collects only images, for example screenshots that an agent took with a script. Other files there are work notes and logs, so output-mesh does not collect them. A scratch image shows a "temporary" mark next to its location. output-mesh does not copy these images. When Claude Code or a restart deletes the folder, the images leave the library. The "Recent changes" feed shows one line for a set of images from one session. Images from the Codex image generation tool (`~/.codex/generated_images/`) get the same treatment. They carry a "generated" mark instead, because Codex does not delete them. By default, output-mesh hides these images. To show them in the list and the feed, click **Temporary images** at the end of the filter row. That switch shows how many images are hidden, and so does the overview header. A click on either count shows them. The Activity view always shows these images.
+### Repositories and worktrees
+
+output-mesh counts a git worktree as part of its main repository. The tree shows each worktree as a `⑂ name` group below that repository. If an agent worked in a repository, output-mesh also watches all worktrees of that repository. When it reads a worktree for the first time, it collects only the documents that changed after git created the worktree. The other files are copies from the checkout.
+
+### Temporary images
+
+From the temporary session folders of Claude Code (`/private/tmp/claude-*/`), output-mesh collects only images, for example screenshots that an agent took with a script. Other files there are work notes and logs, so output-mesh does not collect them. These images show a "temporary" mark next to their location. output-mesh does not copy them, so when Claude Code or a restart deletes the folder, the images leave the library. The "Recent changes" feed shows one line for a set of images from one session.
+
+Images from the Codex image generation tool (`~/.codex/generated_images/`) get the same treatment. They carry a "generated" mark instead, because Codex does not delete them.
+
+By default, output-mesh hides both kinds of images. To show them in the list and the feed, click **Temporary images** at the end of the filter row. That switch shows how many images are hidden, and so does the overview header. A click on either count shows them. The Activity view always shows these images.
 
 ## How to use it
 
@@ -114,12 +130,14 @@ If you type a search term, the tree changes to a flat list in relevance order. E
 
 ### Overview (right, no file selected)
 
-The overview is a grid of widgets. By default, it shows Recent changes, Final, the activity chart, and the breakdowns by kind, agent, and workspace. If you show temporary images, a Temporary images widget also shows small previews of them, grouped by session. You can also turn on Recent tasks, Collection status, Favorites, and Tags.
+The overview is a grid of widgets. By default, it shows Recent changes, Final, the activity chart, and the breakdowns by kind, agent, and workspace. If you show temporary images, a Temporary images widget also shows small previews of them, grouped by session. You can also turn on Recent tasks, Collection status, Favorites, Tags, and Recently read.
 
 - To move a widget, drag its handle. To change its size, drag its bottom-right corner.
 - Click **Layout** to turn widgets on or off, move them, or restore the default layout. This panel also works with the keyboard.
 
 Recent changes lists each file that an agent created, changed, moved, or removed. Scroll down to see changes from the last 30 days. If output-mesh finds a change more than four hours after the agent made it, the feed does not show that change.
+
+Recently read lists the files that Claude Code and Codex read in the last five minutes. output-mesh keeps this list in memory only and never adds these files to the catalog. Codex has no read tool, so output-mesh infers its reads from `cat`, `sed -n`, `head`, `tail`, and `nl` commands, and it can miss some.
 
 The activity chart shows agent activity per hour, day, or week. To see the exact numbers, switch the chart to **Table**. Click a bar in any chart to filter by that value.
 
@@ -131,11 +149,18 @@ The inspector lists each session that changed the file. It also shows tags, note
 
 ### Activity
 
-The Activity view is a live timeline of agent sessions and the files that each session wrote. The newest task is at the top. Each session shows its scratch-folder images apart from its other files, with a "temporary" mark. Use **Small | Large** in the Activity header to change the preview size. Large previews are big enough to see what a screenshot shows. When new work arrives, output-mesh highlights the new cards and images for a few seconds. If you scrolled down, the card that you read stays in place, and a "new tasks" button at the top takes you back. To jump to the top each time new work arrives, turn on **Follow** in the Activity header. If you do not select a file, the timeline uses the full width. If you select a file, the timeline moves to the left column and the file opens on the right.
+The Activity view is a live timeline of agent sessions and the files that each session wrote, newest first.
+
+- Scratch-folder images show apart from the other files, with a "temporary" mark. **Small | Large** in the header changes their size. Large is big enough to read a screenshot.
+- New cards and images stay highlighted for a few seconds.
+- If you scrolled down, the card that you read stays in place, and a "new tasks" button at the top takes you back. To jump to the top each time new work arrives, turn on **Follow** in the header.
+- Documents that no agent session wrote, for example ones that the repository watch or `import` found, appear only in the library. A note at the top of the timeline counts them. Click it to open them there.
+
+If you do not select a file, the timeline uses the full width. If you select a file, the timeline moves to the left column and the file opens on the right.
 
 ### Hide rules
 
-Some folders hold files that you do not want in the library, for example `vendor/`. Hide rules hide them from the view. Collection does not change, and a rule that you turn off brings the files back at once.
+Some folders hold files that you do not want in the library, for example `vendor/`. A hide rule removes them from the view only. Collection does not change, and when you turn a rule off, its files come back at once.
 
 - Four rules are on by default: the folders named `vendor`, `third_party`, `Pods`, and `site-packages`. The folders `.xm` and `.claude` are in the list but off. You can turn each one on or off.
 - A folder-name rule matches only a folder with exactly that name. It does not hide `vendor-notes.md` or `vendors/`. A path rule hides everything under one folder.
@@ -193,6 +218,7 @@ The catalog database does not reclaim free space automatically. If the startup s
 - **Write to your sources.** output-mesh only reads session folders, logs, and repositories. It opens Aside's `state.db` in read-only mode.
 - **Copy your files.** The index points to the original files. Claude Desktop is the only exception: its cache entries are not files, so output-mesh keeps a copy in its own catalog folder.
 - **Listen on the network.** The server listens only on `127.0.0.1`.
+- **Send your data out.** At startup, output-mesh asks the npm registry once for the latest version and sends no data about you. To turn this off, set `OUTPUT_MESH_NO_UPDATE_CHECK=1`. If you use Tailscale, it also asks the other machines in your tailnet whether they run output-mesh.
 - **Let agent HTML send requests.** Previews show in sandboxed frames with no same-origin access, under `connect-src 'none'`. Scripts stay blocked until you allow them for a file. The network stays closed for scripts that you allow. One exception: a draw.io preview can load the shape images that the diagram file links to.
 
 Your catalog is in `~/Library/Application Support/AgentOutputCatalog/catalog.db`. output-mesh can rebuild all of it from disk, except your tags, notes, favorites, and final marks. Collection never overwrites those four.
