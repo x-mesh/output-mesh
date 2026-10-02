@@ -8,6 +8,8 @@ lives in `package.json`; `output-mesh --version` and the explorer footer show it
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-10-02
+
 ### Added
 
 - **ui:** a button left of the title, or the `[` key, hides the explorer so the preview and the overview use the full width. The choice is remembered; the Activity timeline keeps the explorer because it is the timeline.
