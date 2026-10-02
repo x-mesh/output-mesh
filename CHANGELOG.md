@@ -11,8 +11,14 @@ lives in `package.json`; `output-mesh --version` and the explorer footer show it
 ### Added
 
 - **activity:** a note above the timeline counts documents that only the library shows (found by the repository watcher or an import, so no agent session is known); clicking it opens the library filtered to those sources.
+- **overview:** an optional "Recently read" widget lists the files Claude Code and Codex read in the last five minutes (Codex reads are inferred from `cat`/`sed -n`/`head`/`tail`/`nl` shell commands) (`/api/reading`). Reads are kept in memory only, never added to the catalog; the widget is off by default.
 - **ui:** the filter button and overview show a spinner until the first collection finishes, so an empty first run no longer reads as "nothing matched".
 - **make:** `make stop` and `make reset` for restarting a test catalog from scratch.
+
+### Changed
+
+- **collect:** an idle collect uses about 160ms of CPU instead of 580ms. The Claude desktop cache scan stats its ~24,000 entries synchronously, and Gemini records that have not changed since the last collect are no longer re-ingested and re-indexed.
+- **collect:** a growing Claude Code or Codex log now re-reads only the session logs half a second later instead of running every collector three seconds after the log goes quiet. "Recently read" updates within about a second, and the full collect stays on its 30-second cycle.
 
 ## [0.10.0] - 2026-10-01
 

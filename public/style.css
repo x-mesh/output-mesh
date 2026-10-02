@@ -911,6 +911,9 @@ embed.preview-fill { height: 100%; }
 .activity-new button { min-height: 24px; font-size: var(--text-xs); border-color: var(--accent); color: var(--accent); background: var(--bg); box-shadow: 0 1px 3px rgba(0, 0, 0, .12); }
 .activity-sessionless { list-style: none; padding: var(--space-1) var(--space-3); }
 .activity-sessionless button { border: 0; background: none; padding: 0; font-size: var(--text-xs); color: var(--text-dim); text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
+.reading-list { list-style: none; margin: 0; padding: 0; overflow: auto; }
+.reading-row { display: flex; align-items: baseline; gap: var(--space-2); padding: var(--space-1) 0; font-size: var(--text-xs); min-width: 0; }
+.reading-path { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-mono); }
 /* 숨김 규칙 화면 */
 .rule-list { list-style: none; margin: var(--space-3) 0; padding: 0; display: grid; gap: 2px; }
 .rule { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-1) var(--space-2); border-bottom: 1px solid var(--border); }

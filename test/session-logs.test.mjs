@@ -2,10 +2,11 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { appendFileSync, chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { MAX_PROMPT_CHARS, claudeWrites, codexWrites, isIndexablePath, logFilesSince, looksLikePrompt, newLogTail } from '../lib/session-logs.mjs';
+import { MAX_PROMPT_CHARS, claudeWrites, codexReads, codexWrites, isIndexablePath, logFilesSince, looksLikePrompt, newLogTail, shellReads } from '../lib/session-logs.mjs';
 import { CatalogStore } from '../lib/store.mjs';
 import { sweepSessionLogs } from '../lib/collector.mjs';
-import { LOG_READ_CHUNK_BYTES, nfc } from '../lib/paths.mjs';
+import { LOG_READ_CHUNK_BYTES, READING_MAX, READING_WINDOW_S, nfc } from '../lib/paths.mjs';
+import { Watcher } from '../lib/watcher.mjs';
 
 let dir;
 let logs;
@@ -85,6 +86,35 @@ describe('Claude Code transcript 파싱', () => {
         message: { content: [{ type: 'tool_use', name: 'Edit', input: { file_path: join(repo, 'c.rs') } }] } },
     ]);
     expect(claudeWrites(path).map((w) => w.path).sort()).toEqual([join(repo, 'a.md'), join(repo, 'c.rs')].sort());
+  });
+
+  describe('지금 읽는 중', () => {
+    const readAt = (secondsAgo, file) => ({
+      sessionId: 'abc', cwd: repo, timestamp: new Date(Date.now() - secondsAgo * 1000).toISOString(),
+      message: { content: [{ type: 'tool_use', name: 'Read', input: { file_path: join(repo, file) } }] },
+    });
+
+    test('Read 는 쓰기로 반환되지 않고 tail.reads 에만 쌓인다', () => {
+      const tail = newLogTail();
+      expect(claudeWrites(transcript([readAt(5, 'b.md')]), tail)).toEqual([]);
+      expect(tail.reads).toEqual([expect.objectContaining({ path: join(repo, 'b.md'), sessionRef: 'abc', workspace: repo })]);
+    });
+
+    test('창 밖의 옛 읽기는 로그를 처음부터 다시 읽어도 받지 않는다', () => {
+      const tail = newLogTail();
+      claudeWrites(transcript([readAt(READING_WINDOW_S + 60, 'old.md'), readAt(5, 'new.md')]), tail);
+      expect(tail.reads.map((read) => read.path)).toEqual([join(repo, 'new.md')]);
+    });
+
+    test('수집기는 읽기를 넘기고 비운다 — 받는 쪽이 없어도 쌓이지 않는다', async () => {
+      const path = transcript([readAt(5, 'b.md')]);
+      const source = { collector: 'claude-code', provider: 'claude-code', root: logs, suffix: '.jsonl', cursorKey: 'claude.scanned_until', parse: claudeWrites };
+      const tails = new Map();
+      const seen = [];
+      await sweepSessionLogs(store, source, { tails, onRead: (read) => seen.push(read) });
+      expect(seen).toEqual([expect.objectContaining({ collector: 'claude-code', path: join(repo, 'b.md') })]);
+      expect(tails.get(path).reads).toEqual([]);
+    });
   });
 
   test('같은 경로를 여러 번 고쳐도 한 번만 센다', () => {
@@ -466,5 +496,87 @@ describe('자라는 로그는 새로 붙은 줄만 읽는다', () => {
 
     appendFileSync(path, line({ type: 'response_item', payload: { input: '*** Add File: src/two.mjs' } }));
     expect(await sweepSessionLogs(store, source, { tails })).toMatchObject({ logs: 1, paths: 1, inserted: 1 });
+  });
+});
+
+describe('Watcher 의 지금 읽는 중', () => {
+  const watcher = () => new Watcher(store, [], { useFsWatch: false, withSessionLogs: false });
+  const read = (path, at, sessionRef = 's') => ({ collector: 'claude-code', provider: 'claude-code', sessionRef, workspace: '/w', path, at });
+
+  test('최근 것이 먼저고 창이 지나면 사라진다', () => {
+    const w = watcher();
+    w.noteRead(read('/w/a.md', 1_000));
+    w.noteRead(read('/w/b.md', 1_100));
+    expect(w.reading(1_200).map((r) => r.path)).toEqual(['/w/b.md', '/w/a.md']);
+    expect(w.reading(1_000 + READING_WINDOW_S + 1).map((r) => r.path)).toEqual(['/w/b.md']);
+  });
+
+  test('같은 세션이 같은 파일을 다시 읽으면 한 줄이고 시각만 오른다', () => {
+    const w = watcher();
+    w.noteRead(read('/w/a.md', 1_000));
+    w.noteRead(read('/w/a.md', 1_050));
+    expect(w.reading(1_060)).toEqual([expect.objectContaining({ path: '/w/a.md', at: 1_050 })]);
+  });
+
+  test('상한을 넘으면 가장 오래된 것부터 버린다', () => {
+    const w = watcher();
+    for (let i = 0; i < READING_MAX + 5; i++) w.noteRead(read(`/w/${i}.md`, 1_000 + i));
+    const kept = w.reading(1_000 + READING_MAX + 5);
+    expect(kept).toHaveLength(READING_MAX);
+    expect(kept.at(-1).path).toBe('/w/5.md');
+  });
+});
+
+describe('Codex 가 읽은 파일', () => {
+  test('cat · sed -n · head · tail · nl 의 파일 인자를 읽기로 센다', () => {
+    expect(shellReads("sed -n '1,220p' a.sh && sed -n '1,9p' b.sh", '/w')).toEqual(['/w/a.sh', '/w/b.sh']);
+    expect(shellReads('head -n 20 /abs/y.md; tail -50 z.md; nl -ba n.md', '/w')).toEqual(['/abs/y.md', '/w/z.md', '/w/n.md']);
+    expect(shellReads("cat a.md b.md 2>/dev/null || true", '/w')).toEqual(['/w/a.md', '/w/b.md']);
+  });
+
+  test('검색 · 파이프 뒤의 거르기 · 제자리 수정 · 변수 · 글롭은 읽기가 아니다', () => {
+    expect(shellReads('rg foo lib', '/w')).toEqual([]);
+    expect(shellReads("curl -s https://x | sed -n '1,80p'", '/w')).toEqual([]);
+    expect(shellReads("sed -i 's/a/b/' x.md", '/w')).toEqual([]);
+    expect(shellReads('cat $HOME/x.md src/*.js', '/w')).toEqual([]);
+  });
+
+  test('파이프 앞의 명령은 읽기다', () => {
+    expect(shellReads("nl -ba a.rb | sed -n '1,80p'", '/w')).toEqual(['/w/a.rb']);
+  });
+
+  test('호출마다 자기 workdir 로 푼다', () => {
+    const input = "await Promise.all([tools.exec_command({cmd:'cat a.md',workdir:'/p1'}), tools.exec_command({\"cmd\":\"cat b.md\",\"workdir\":\"/p2\"})])";
+    expect(codexReads(input, '/d')).toEqual(['/p1/a.md', '/p2/b.md']);
+    expect(codexReads('tools.exec_command({cmd:"cat c.md"})', '/d')).toEqual(['/d/c.md']);
+  });
+
+  test('최근 읽기만 tail.reads 에 쌓고, 로그를 처음부터 다시 읽어도 옛 읽기는 받지 않는다', () => {
+    writeFileSync(join(repo, 'src', 'now.md'), '1');
+    writeFileSync(join(repo, 'src', 'old.md'), '2');
+    const call = (file, secondsAgo) => ({
+      timestamp: new Date(Date.now() - secondsAgo * 1000).toISOString(),
+      type: 'response_item',
+      payload: { type: 'custom_tool_call', name: 'exec', input: `const r = await tools.exec_command({"cmd":"cat ${file}","workdir":"${repo}"});` },
+    });
+    const path = codexLog([
+      { type: 'session_meta', payload: { id: 'th', session_id: 'conv', cwd: repo } },
+      call('src/old.md', READING_WINDOW_S + 60),
+      call('src/now.md', 5),
+      call('src/missing.md', 5),
+    ]);
+    const tail = newLogTail();
+    expect(codexWrites(path, tail)).toEqual([]);
+    expect(tail.reads).toEqual([expect.objectContaining({ path: join(repo, 'src', 'now.md'), sessionRef: 'conv', workspace: repo })]);
+  });
+
+  test('도구 출력 줄에 exec_command 라는 글자가 있어도 읽기가 아니다', () => {
+    const path = codexLog([
+      { type: 'session_meta', payload: { id: 'th', cwd: repo } },
+      { timestamp: new Date().toISOString(), type: 'response_item', payload: { type: 'custom_tool_call_output', output: 'exec_command failed: cat src/x.md' } },
+    ]);
+    const tail = newLogTail();
+    codexWrites(path, tail);
+    expect(tail.reads ?? []).toEqual([]);
   });
 });

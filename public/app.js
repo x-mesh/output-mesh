@@ -1334,6 +1334,8 @@ async function refresh({ live = false } = {}) {
     state.tree = buildTree(rows);
     renderTree({ keepScroll: live });
     if (state.view === 'home') void renderHome();
+  } else if (state.view === 'home') {
+    void refreshReading();
   }
   updateSummary();
   renderFilters(state.facets);
@@ -1989,11 +1991,12 @@ async function renderHome() {
   // 켜 둔 위젯이 쓰는 것만 받는다. 열 개를 다 받으면 안 보이는 위젯 때문에 매 수집마다 요청이 는다.
   const on = new Set(homeBlocks().filter((block) => block.on).map((block) => block.id));
   const fetchIf = (want, path) => (want ? api(path).catch(() => null) : Promise.resolve(null));
-  const [timeline, sessions, status, scratch] = await Promise.all([
+  const [timeline, sessions, status, scratch, reading] = await Promise.all([
     fetchIf(on.has('activity'), `/api/timeline?${searchParams()}`),
     fetchIf(on.has('sessions'), `/api/activity?${activityParams()}`).then((got) => got?.sessions ?? null),
     fetchIf(on.has('status'), '/api/status'),
     fetchIf(on.has('scratch') && state.showTemporary, `/api/activity?${activityParams()}&scratch=1`).then((got) => got?.sessions ?? null),
+    fetchIf(on.has('reading'), '/api/reading').then((got) => got?.reading ?? null),
   ]);
   if (token !== homeToken || state.view !== 'home') return;
 
@@ -2007,7 +2010,7 @@ async function renderHome() {
     current.replaceChild(dashboard().querySelector('.dash-head'), current.querySelector('.dash-head'));
   }
   const dash = $('detail').querySelector('.dash');
-  fillBlocks({ timeline, sessions, status, scratch }, state.rows.filter((r) => r.state === 'final'));
+  fillBlocks({ timeline, sessions, status, scratch, reading }, state.rows.filter((r) => r.state === 'final'));
   dash.classList.remove('refreshing');
   dash.scrollTop = scroll;
   // 실시간으로 위에 줄이 붙어도 보던 줄이 제자리에 있게 한다. 맨 위를 보고 있었으면 새 줄을 보인다.
@@ -2017,7 +2020,7 @@ async function renderHome() {
 }
 
 // 개요에서 고를 수 있는 위젯. 제목줄과 키보드 안내는 틀이라 대상이 아니다.
-const HOME_BLOCKS = ['changes', 'finals', 'scratch', 'activity', 'kinds', 'agents', 'workspaces', 'sessions', 'status', 'favorites', 'tags'];
+const HOME_BLOCKS = ['changes', 'finals', 'scratch', 'activity', 'kinds', 'agents', 'workspaces', 'sessions', 'status', 'favorites', 'tags', 'reading'];
 // 처음 켜 두는 것. 나머지는 구성에서 고른다 — 열한 개를 다 펼치면 첫 화면이 읽히지 않는다.
 // 임시 이미지는 켜 둔다. 처음 수집한 것은 피드에 오르지 않아서, 여기 없으면 있는 줄을 모른다(실제로 그랬다).
 const HOME_DEFAULT_ON = ['changes', 'finals', 'scratch', 'activity', 'kinds', 'agents', 'workspaces'];
@@ -2026,7 +2029,7 @@ const HOME_BLOCK_LABEL = {
   changes: 'changes.title', finals: 'home.finalsTitle', activity: 'home.block.activity',
   kinds: 'dist.kind', agents: 'dist.agent', workspaces: 'dist.workspace',
   sessions: 'home.block.sessions', status: 'home.block.status',
-  favorites: 'home.favoritesTitle', tags: 'filter.tag', scratch: 'home.block.scratch',
+  favorites: 'home.favoritesTitle', tags: 'filter.tag', scratch: 'home.block.scratch', reading: 'home.block.reading',
 };
 const HOME_SESSION_COUNT = 5;
 
@@ -2045,6 +2048,7 @@ const GRID_DEFAULT = {
   status: { x: 6, y: 29, w: 6, h: 6 },
   favorites: { x: 0, y: 37, w: 6, h: 6 },
   tags: { x: 6, y: 37, w: 6, h: 5 },
+  reading: { x: 0, y: 42, w: 12, h: 7 },
 };
 
 /** 저장된 구성과 기본값을 합친다. 모르는 id 는 버리고 빠진 id 는 뒤에 붙여 켠다 — 블록이 늘어도 설정이 안 깨진다. */
@@ -2076,16 +2080,19 @@ function saveHomeLayout() {
 }
 
 /** 블록을 켜고 끄면 위젯이 늘거나 줄어 그리드를 다시 세워야 한다. 자리 · 크기만 바뀔 때는 세우지 않는다. */
-function setHomeBlocks(next, focus = null) {
+function setHomeBlocks(next, focus = null, reveal = null) {
   prefs.write('home.blocks', next);
   grid = null;
   // 다시 그리면 포커스가 사라진다. 키보드로 연달아 누를 수 있게 같은 자리로 돌려놓는다.
   void renderHome().then(() => {
     if (!focus) return;
     const target = document.querySelector(`.dash-config [data-focus="${focus}"]`);
+    // 포커스가 스크롤을 끌고 가면 방금 켠 위젯이 첫 화면 밖에 있을 때 켠 효과가 안 보인다. 스크롤은 아래에서 따로 정한다.
     // 맨 끝으로 간 블록의 화살표는 disabled 라 포커스를 못 받는다. 같은 줄의 체크박스로 내려앉는다.
-    if (target && !target.disabled) target.focus();
-    else document.querySelector(`.dash-config [data-focus="${focus.split(':')[0]}"]`)?.focus();
+    if (target && !target.disabled) target.focus({ preventScroll: true });
+    else document.querySelector(`.dash-config [data-focus="${focus.split(':')[0]}"]`)?.focus({ preventScroll: true });
+    // 새로 켠 위젯은 기본 자리가 아래쪽일 수 있다. 보이는 곳까지 내려가야 켜졌다는 걸 안다.
+    document.querySelector(`.grid-stack-item[data-block="${reveal}"]`)?.scrollIntoView({ block: 'nearest' });
   });
 }
 
@@ -2118,7 +2125,7 @@ function homeConfig() {
         type: 'checkbox',
         checked: block.on,
         attrs: { 'data-focus': block.id },
-        onchange: () => setHomeBlocks(blocks.map((other, i) => (i === index ? { ...other, on: !other.on } : other)), block.id),
+        onchange: () => setHomeBlocks(blocks.map((other, i) => (i === index ? { ...other, on: !other.on } : other)), block.id, block.on ? null : block.id),
       }),
       t(HOME_BLOCK_LABEL[block.id])),
     arrow(block, -1, 'home.moveUp', '↑'),
@@ -2167,6 +2174,7 @@ function fillBlocks(data, finals) {
     sessions: () => sessionsPanel(data.sessions),
     status: () => statusPanel(data.status),
     scratch: () => scratchPanel(data.scratch),
+    reading: () => readingPanel(data.reading),
   };
   // 썸네일은 그림을 다시 받는다. 수집 알림마다 같은 그림을 갈아 끼우면 30초마다 깜빡이므로, 바뀌었을 때만 그린다.
   const signatures = { scratch: JSON.stringify((data.scratch ?? []).map((s) => [s.session_ref, s.scratch_count, s.scratch.map((f) => f.id)])) };
@@ -2544,6 +2552,39 @@ function scratchPanel(sessions) {
     sessions.length
       ? el('ul', { className: 'session-list' }, ...sessions.slice(0, HOME_SESSION_COUNT).map(sessionCard))
       : el('p', { className: 'hint' }, t('scratch.empty')));
+}
+
+/**
+ * 지금 읽는 중인 파일. 산출물이 아니라 에이전트가 들여다보는 파일이라 카탈로그에 없다 — 눌러서 열 곳이 없고,
+ * 경로만 보인다. 서버가 메모리에만 들고 있다가 몇 분 지나면 버린다.
+ */
+function readingPanel(reading) {
+  if (!reading) return el('p', { className: 'hint' }, t('home.activityFailed'));
+  return el('section', { className: 'home-sessions' },
+    el('h3', {}, t('home.block.reading')),
+    reading.length
+      ? el('ul', { className: 'reading-list' }, ...reading.map(readingRow))
+      : el('p', { className: 'hint' }, t('reading.empty')));
+}
+
+/**
+ * 읽기는 카탈로그를 바꾸지 않아서 위에서 개요를 다시 그리지 않는 수집 알림에도 갱신돼야 한다. 이 위젯의 내용만
+ * 갈아 끼운다. 꺼 둔 위젯은 틀이 없어서 요청도 하지 않는다.
+ */
+async function refreshReading() {
+  const host = $('detail').querySelector('.block-body[data-body="reading"]');
+  if (!host) return;
+  const got = await api('/api/reading').catch(() => null);
+  if (host.isConnected) host.replaceChildren(readingPanel(got?.reading ?? null));
+}
+
+function readingRow(read) {
+  const inWorkspace = read.workspace && read.path.startsWith(`${read.workspace}/`);
+  return el('li', { className: 'reading-row' },
+    el('span', { className: 'when' }, relativeWhen(read.at)),
+    el('span', { className: 'chip static', attrs: { 'data-provider': PROVIDER_OF_COLLECTOR[read.collector] ?? read.collector } }, collectorLabel(read.collector)),
+    el('span', { className: 'reading-path', title: read.path }, inWorkspace ? read.path.slice(read.workspace.length + 1) : read.path),
+    read.workspace && el('span', { className: 'where-dir' }, read.workspace.split('/').pop()));
 }
 
 /** 수집이 살아 있나. 상단의 점과 탭 제목이 말하는 것을 펼쳐 놓은 자리다. */
@@ -3135,6 +3176,11 @@ function connectLive() {
     }
     if ('error' in payload) collectError = payload.error;
     if (payload.type === 'failed' || payload.type === 'hello') renderCollectError();
+    // 읽기만 바뀌었다. 카탈로그는 그대로라 목록을 다시 받지 않고 그 위젯만 갈아 끼운다.
+    if (payload.type === 'reading') {
+      if (state.view === 'home') void refreshReading();
+      return;
+    }
     if (payload.type !== 'collected') return;
     catalogReady = true;
     // 보고 있으면 세지 않는다. 피드가 이미 개요 맨 위에서 같은 것을 말한다.

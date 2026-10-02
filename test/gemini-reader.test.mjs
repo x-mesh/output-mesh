@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { appendFileSync, mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { GeminiReader, parseGeminiTranscriptLine } from '../lib/gemini-reader.mjs';
@@ -156,6 +156,38 @@ describe('Gemini Antigravity reader', () => {
     const result = await new GeminiReader({ home: dir, batchSize: 1 }).scan();
     expect(result.records.map((record) => record.path)).toEqual([join(active.sessionDir, 'active.md')]);
     expect(timerFired).toBe(true);
+  });
+
+  test('does not re-ingest or re-index records that have not changed since the last sweep', async () => {
+    const { root, sessionDir } = session();
+    const target = join(dir, 'result.md'); writeFileSync(target, '# result');
+    writeFileSync(join(sessionDir, '.system_generated', 'logs', 'transcript_full.jsonl'), [
+      line({ type: 'USER_INPUT', content: '결과 작성' }),
+      line({ created_at: '2026-01-01T00:00:00Z', tool_calls: [{ name: 'write_to_file', args: { TargetFile: target } }] }),
+    ].join(''));
+    const store = new CatalogStore(join(dir, 'catalog.db'));
+    try {
+      const reader = new GeminiReader({ roots: [root] });
+      expect((await sweepGemini(store, reader)).inserted).toBe(1);
+      const quiet = await sweepGemini(store, reader);
+      expect(quiet).toMatchObject({ unchanged: 1, touched: 0, updated: 0 });
+
+      appendFileSync(target, '\nmore');
+      utimesSync(target, new Date(), new Date(Date.now() + 2000));
+      expect((await sweepGemini(store, reader)).updated).toBe(1);
+    } finally { store.close(); }
+  });
+
+  test('a new reader ingests everything again so provenance is recorded after a restart', async () => {
+    const { root, sessionDir } = session();
+    const target = join(dir, 'result.md'); writeFileSync(target, '# result');
+    writeFileSync(join(sessionDir, '.system_generated', 'logs', 'transcript_full.jsonl'),
+      line({ created_at: '2026-01-01T00:00:00Z', tool_calls: [{ name: 'write_to_file', args: { TargetFile: target } }] }));
+    const store = new CatalogStore(join(dir, 'catalog.db'));
+    try {
+      await sweepGemini(store, new GeminiReader({ roots: [root] }));
+      expect((await sweepGemini(store, new GeminiReader({ roots: [root] }))).unchanged).toBe(0);
+    } finally { store.close(); }
   });
 
   test('ingests files once with Gemini provenance and no tool payload', async () => {

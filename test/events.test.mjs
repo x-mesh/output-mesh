@@ -1,11 +1,12 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import { mkdtempSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { appendFileSync, mkdirSync, mkdtempSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { CatalogStore } from '../lib/store.mjs';
 import { ingestFile, recheckKnownFiles } from '../lib/collector.mjs';
 import { recentChanges } from '../lib/search.mjs';
 import { Watcher } from '../lib/watcher.mjs';
+import { claudeWrites } from '../lib/session-logs.mjs';
 import { nfc } from '../lib/paths.mjs';
 
 let dir;
@@ -368,5 +369,49 @@ describe('수집 오류 — 다음 수집이 성공해도 가려지지 않는다
 
     expect(seen).toHaveLength(1);
     expect(seen[0]).toMatchObject({ type: 'failed', error: { code: 'sweep_failed', message: '디스크가 가득 참' } });
+  });
+});
+
+describe('세션 로그만 도는 가벼운 수집', () => {
+  const setup = () => {
+    const logs = join(dir, 'logs');
+    mkdirSync(logs, { recursive: true });
+    const source = { collector: 'claude-code', provider: 'claude-code', root: logs, suffix: '.jsonl', cursorKey: 'claude.scanned_until', parse: claudeWrites };
+    let swept = 0;
+    const claudeReader = { sweep: async () => { swept++; return {}; } };
+    const watcher = new Watcher(store, [], { useFsWatch: false, withSessionLogs: true, home: dir, claudeReader, sessionLogSources: [source] });
+    const seen = [];
+    watcher.onCollect((payload) => seen.push(payload.type));
+    const log = join(logs, 'sess.jsonl');
+    const tool = (name, file) => JSON.stringify({ sessionId: 'abc', cwd: dir, timestamp: new Date().toISOString(), message: { content: [{ type: 'tool_use', name, input: { file_path: file } }] } }) + '\n';
+    return { watcher, seen, log, tool, sweeps: () => swept };
+  };
+
+  test('쓰기가 있으면 수집 알림을, 읽기만 있으면 읽기 알림만 보낸다. 다른 수집기는 돌지 않는다', async () => {
+    const { watcher, seen, log, tool, sweeps } = setup();
+    const file = join(dir, 'a.md');
+    writeFileSync(file, '# a');
+    writeFileSync(log, tool('Write', file));
+    await watcher.collectLogs();
+    expect(seen).toEqual(['collected']);
+
+    appendFileSync(log, tool('Read', file));
+    await watcher.collectLogs();
+    expect(seen).toEqual(['collected', 'reading']);
+    expect(watcher.reading().map((read) => read.path)).toEqual([file]);
+    expect(sweeps()).toBe(0);
+  });
+
+  test('겹치면 뒤에 온 수집을 미뤘다가 앞의 것이 끝나면 돌린다', async () => {
+    const { watcher } = setup();
+    watcher.logDelayMs = 0;
+    watcher.running = true;
+    expect(await watcher.collectLogs()).toBeNull();
+    expect(watcher.pending.logs).toBe(true);
+    watcher.running = false;
+    watcher.runPending();
+    expect(watcher.pending.logs).toBe(false);
+    expect(watcher.logTimer).not.toBeNull();
+    watcher.stop();
   });
 });
