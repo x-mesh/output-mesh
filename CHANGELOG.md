@@ -12,6 +12,7 @@ lives in `package.json`; `output-mesh --version` and the explorer footer show it
 
 - **activity:** a note above the timeline counts documents that only the library shows (found by the repository watcher or an import, so no agent session is known); clicking it opens the library filtered to those sources.
 - **overview:** an optional "Recently read" widget lists the files Claude Code and Codex read in the last five minutes (Codex reads are inferred from `cat`/`sed -n`/`head`/`tail`/`nl` shell commands) (`/api/reading`). Reads are kept in memory only, never added to the catalog; the widget is off by default.
+- **ui:** while a file, the rules, or the coverage screen is open, the top bar counts new lines in Recent changes ("3 new changes"); a click goes back to the overview. It counts what the feed shows, not hidden kinds, and stays off in the Activity view.
 - **ui:** the filter button and overview show a spinner until the first collection finishes, so an empty first run no longer reads as "nothing matched".
 - **make:** `make stop` and `make reset` for restarting a test catalog from scratch.
 

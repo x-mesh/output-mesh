@@ -454,6 +454,7 @@ function setModeState(mode) {
   $('follow-toggle').hidden = mode !== 'activity';
   renderTemporaryToggle();
   updateWide();
+  renderNewChanges();
 }
 
 function setMode(mode) {
@@ -1339,6 +1340,7 @@ async function refresh({ live = false } = {}) {
   }
   updateSummary();
   renderFilters(state.facets);
+  renderNewChanges();
   await refreshOverview();
 }
 
@@ -1870,17 +1872,22 @@ const scratchMark = (generated) => el('span', {
  * 재부팅하면 작업 폴더가 통째로 지워져 수백 줄이 쏟아진다. 묶음은 받은 쪽을 이어 붙인 목록에서 만들어서
  * 다음 쪽을 받으면 쪽 경계에서 갈린 묶음도 다시 하나가 된다.
  */
-function changeRows(changes) {
-  const rows = [];
+/** 피드의 한 줄 단위. 상단 바의 새 변경 수도 이 단위로 세야 피드와 같은 수를 말한다. */
+function changeGroups(changes) {
+  const groups = [];
   for (let i = 0; i < changes.length;) {
     const first = changes[i];
     const session = first.location?.scratch;
     let end = i + 1;
     while (session && end < changes.length && changes[end].location?.scratch === session && changes[end].change === first.change) end++;
-    rows.push(end - i > 1 ? scratchGroupRow(changes.slice(i, end)) : changeRow(first));
+    groups.push(changes.slice(i, end));
     i = end;
   }
-  return rows;
+  return groups;
+}
+
+function changeRows(changes) {
+  return changeGroups(changes).map((group) => (group.length > 1 ? scratchGroupRow(group) : changeRow(group[0])));
 }
 
 function scratchGroupRow(group) {
@@ -2011,6 +2018,7 @@ async function renderHome() {
   }
   const dash = $('detail').querySelector('.dash');
   fillBlocks({ timeline, sessions, status, scratch, reading }, state.rows.filter((r) => r.state === 'final'));
+  renderNewChanges();
   dash.classList.remove('refreshing');
   dash.scrollTop = scroll;
   // 실시간으로 위에 줄이 붙어도 보던 줄이 제자리에 있게 한다. 맨 위를 보고 있었으면 새 줄을 보인다.
@@ -3137,6 +3145,36 @@ function renderCollectError() {
     collectErrorButton.title = [[error.code, error.message, error.path].filter(Boolean).join(' · '), t('live.errorAck')].join('\n');
   }
   renderTitle();
+}
+
+/**
+ * 개요 밖(파일 상세 · 규칙 · 수집 범위)에서는 피드가 보이지 않아, 그동안 들어온 변경을 아무 데서도 알 수 없었다.
+ * 상단 바에 수로만 적고 누르면 개요로 간다. 토스트를 띄우지 않는다 — 변경은 분당 2건 가까이 들어와(실측 54분에 100건)
+ * 늘 떠 있게 되고, 무엇이 바뀌었는지는 피드가 이미 말한다. 수는 피드에 보일 줄 수다: 라이브러리가 숨긴 종류는
+ * 빠지고 묶인 이미지는 한 줄이다. 활동 보기는 화면 자체가 새 작업을 보여 주므로 띄우지 않는다.
+ */
+let feedSeenId = null;
+const newChangesButton = el('button', {
+  type: 'button',
+  className: 'link new-changes',
+  hidden: true,
+  onclick: () => goHome(),
+});
+$('live').after(newChangesButton);
+
+const feedVisible = () => state.mode === 'library' && state.view === 'home' && homeBlocks().some((block) => block.id === 'changes' && block.on);
+
+function renderNewChanges() {
+  const newest = state.changes[0]?.id ?? 0;
+  if (feedSeenId === null || feedVisible()) feedSeenId = Math.max(feedSeenId ?? 0, newest);
+  const unseen = state.mode === 'library' ? state.changes.filter((change) => change.id > feedSeenId) : [];
+  const lines = changeGroups(unseen).length;
+  newChangesButton.hidden = lines === 0;
+  if (lines === 0) return;
+  // 한 쪽보다 많이 밀리면 피드는 첫 쪽만 다시 받는다. 그 너머는 세지 못했으므로 + 를 붙인다.
+  const more = unseen.length === state.changes.length && state.changesMore;
+  newChangesButton.textContent = t('live.newChanges', { n: lines, more });
+  newChangesButton.title = t('live.newChangesTitle');
 }
 
 /**

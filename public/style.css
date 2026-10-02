@@ -254,6 +254,7 @@ kbd {
 .live[data-status="up"]::before { background: var(--final); }
 .live[data-status="down"] { color: var(--danger); }
 .live[data-status="down"]::before { background: var(--danger); }
+.new-changes { font-size: var(--text-xs); color: var(--accent); white-space: nowrap; }
 
 /* ── 뼈대 ─────────────────────────────────────────────────────────────── */
 
