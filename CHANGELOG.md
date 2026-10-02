@@ -8,6 +8,8 @@ lives in `package.json`; `output-mesh --version` and the explorer footer show it
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-10-02
+
 ### Added
 
 - **activity:** a note above the timeline counts documents that only the library shows (found by the repository watcher or an import, so no agent session is known); clicking it opens the library filtered to those sources.
