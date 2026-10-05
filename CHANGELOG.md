@@ -8,6 +8,8 @@ lives in `package.json`; `output-mesh --version` and the explorer footer show it
 
 ## [Unreleased]
 
+## [0.12.1] - 2026-10-05
+
 ### Changed
 
 - **overview:** Recent outputs replaces the change-event feed with one latest row per available file. Rows show the filename, document title, location, and time; repeated edits and deleted files no longer crowd the list.
