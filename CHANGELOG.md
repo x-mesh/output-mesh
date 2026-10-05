@@ -8,6 +8,15 @@ lives in `package.json`; `output-mesh --version` and the explorer footer show it
 
 ## [Unreleased]
 
+### Changed
+
+- **overview:** Recent outputs replaces the change-event feed with one latest row per available file. Rows show the filename, document title, location, and time; repeated edits and deleted files no longer crowd the list.
+- **activity:** clarify the empty state and the link to documents with no known session.
+
+### Fixed
+
+- **overview:** live updates replace existing file rows and remove deleted files from previously loaded pages; pagination never repeats earlier edits to the same file.
+
 ## [0.12.0] - 2026-10-02
 
 ### Added

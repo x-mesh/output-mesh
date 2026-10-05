@@ -607,13 +607,24 @@ const addCounts = (base, extra = {}) =>
  * 변경 기록은 쪽 단위로 쌓는다. 실시간 갱신은 가장 새 줄 뒤(after)만 받아 위에 붙인다 — 첫 쪽을
  * 다시 받으면 스크롤로 불러 둔 이전 기록이 사라진다. 한 쪽보다 많이 밀렸으면 처음부터 다시 받는다.
  */
+function mergeChanges(first, second, removed = []) {
+  const excluded = new Set(removed);
+  const files = new Map();
+  for (const change of [...first, ...second]) {
+    if (excluded.has(change.artifact_id)) continue;
+    const previous = files.get(change.artifact_id);
+    if (!previous || change.id > previous.id) files.set(change.artifact_id, change);
+  }
+  return [...files.values()].sort((a, b) => b.id - a.id);
+}
+
 async function loadChanges({ live = false } = {}) {
   const newest = state.changes[0]?.id;
   try {
     if (live && newest !== undefined) {
       const data = await api(`/api/changes?${searchParams({ limit: CHANGE_PAGE_SIZE, after: newest })}`);
       if (!data.more) {
-        state.changes = [...data.changes, ...state.changes];
+        state.changes = mergeChanges(data.changes, state.changes, data.removed);
         state.hiddenChanges = addCounts(state.hiddenChanges, data.hidden);
         return;
       }
@@ -645,7 +656,7 @@ async function loadOlderChanges() {
     state.changesLoading = false;
   }
   if (state.changes.at(-1)?.id !== oldest) return;
-  state.changes = [...state.changes, ...data.changes];
+  state.changes = mergeChanges(state.changes, data.changes);
   state.changesMore = data.more;
   state.hiddenChanges = addCounts(state.hiddenChanges, data.hidden);
   replaceChangesPanel();
@@ -1869,27 +1880,23 @@ function homeItem(row) {
 
 let changesObserver = null;
 
-/**
- * 최근 변경. 에이전트 기록으로 본 변화와 디스크를 다시 확인해 본 변화를 구분해 적는다.
- * 목록은 제 높이 안에서 스크롤하고, 끝에 닿으면 이전 쪽을 받는다(보관 30일이라 수천 줄이 될 수 있다).
- */
 function changesPanel() {
   changesObserver?.disconnect();
   changesObserver = null;
   if (state.changes.length === 0) {
-    return el('section', { className: 'changes' }, el('h3', {}, t('changes.title')), el('p', { className: 'hint' }, t('changes.empty')), hiddenChangesLine());
+    return el('section', { className: 'changes' }, el('h3', {}, t('changes.title')), el('p', { className: 'hint' }, t('changes.empty')));
   }
   const tail = state.changesMore
     ? el('li', { className: 'change-more hint' }, t('changes.loading'))
     : state.changes.length > CHANGE_PAGE_SIZE && el('li', { className: 'change-more hint' }, t('changes.end'));
-  const scroller = el('div', { className: 'change-scroll' }, el('ol', { className: 'change-list' }, ...changeRows(state.changes), tail));
+  const scroller = el('div', { className: 'change-scroll' }, el('ol', { className: 'change-list' }, ...state.changes.map(changeRow), tail));
   if (state.changesMore) {
     changesObserver = new IntersectionObserver((entries) => {
       if (entries.some((entry) => entry.isIntersecting)) void loadOlderChanges();
     }, { root: scroller, rootMargin: '0px 0px 120px 0px' });
     changesObserver.observe(tail);
   }
-  return el('section', { className: 'changes' }, el('h3', {}, t('changes.title')), scroller, hiddenChangesLine());
+  return el('section', { className: 'changes' }, el('h3', {}, t('changes.title')), scroller);
 }
 
 /** 임시 이미지 표시. Codex 생성 그림은 지워지지 않으므로 '임시'가 아니라 '생성'이라 적는다. 다루는 규칙은 같다. */
@@ -1898,60 +1905,16 @@ const scratchMark = (generated) => el('span', {
   title: t(generated ? 'where.generatedTitle' : 'where.scratchTitle'),
 }, t(generated ? 'where.generated' : 'where.scratch'));
 
-/**
- * 한 세션 작업 폴더의 이미지가 잇달아 생기거나 사라지면 한 줄로 묶는다. 스크린샷은 수십 장씩 찍히고,
- * 재부팅하면 작업 폴더가 통째로 지워져 수백 줄이 쏟아진다. 묶음은 받은 쪽을 이어 붙인 목록에서 만들어서
- * 다음 쪽을 받으면 쪽 경계에서 갈린 묶음도 다시 하나가 된다.
- */
-/** 피드의 한 줄 단위. 상단 바의 새 변경 수도 이 단위로 세야 피드와 같은 수를 말한다. */
-function changeGroups(changes) {
-  const groups = [];
-  for (let i = 0; i < changes.length;) {
-    const first = changes[i];
-    const session = first.location?.scratch;
-    let end = i + 1;
-    while (session && end < changes.length && changes[end].location?.scratch === session && changes[end].change === first.change) end++;
-    groups.push(changes.slice(i, end));
-    i = end;
-  }
-  return groups;
-}
-
-function changeRows(changes) {
-  return changeGroups(changes).map((group) => (group.length > 1 ? scratchGroupRow(group) : changeRow(group[0])));
-}
-
-function scratchGroupRow(group) {
-  const [first] = group;
-  return el('li', {}, el('button', {
-    type: 'button',
-    className: 'change-item',
-    onclick: () => select(first.artifact_id, { reveal: true }),
-  },
-    el('span', { className: `change-kind change-${first.change}` }, t(`change.${first.change}`)),
-    el('span', { className: 'change-name' }, t(first.location.generated ? 'changes.generatedImages' : 'changes.scratchImages', { n: group.length })),
-    el('span', { className: 'change-where' }, ...keep([
-      first.location.repo && el('span', { className: 'where-repo' }, first.location.repo),
-      scratchMark(first.location.generated),
-    ])),
-    el('span', { className: 'change-tags' }, ...changeAgents(first)),
-    el('span', { className: 'when', title: fmtDate(first.at) }, relativeWhen(first.at))));
-}
-
 function changeRow(change) {
   return el('li', {}, el('button', {
     type: 'button',
     className: 'change-item',
     onclick: () => select(change.artifact_id, { reveal: true }),
   },
-    el('span', { className: `change-kind change-${change.change}` }, t(`change.${change.change}`)),
-    el('span', { className: 'change-name' }, change.file_name),
-    el('span', { className: 'change-where' }, ...locationNodes(change)),
-    el('span', { className: 'change-tags' }, ...keep([
-      ...changeAgents(change),
-      change.source === 'disk' && el('span', { className: 'change-outside', title: t('changes.outsideTitle') }, t('changes.outside')),
-    ])),
-    el('span', { className: 'when', title: fmtDate(change.at) }, relativeWhen(change.at))));
+    el('span', { className: 'change-name', title: change.file_name }, change.file_name),
+    el('span', { className: 'when', title: fmtDate(change.at) }, relativeWhen(change.at)),
+    change.subtitle && el('span', { className: 'change-title', title: change.subtitle }, change.subtitle),
+    el('span', { className: 'change-where' }, ...locationNodes(change))));
 }
 
 /** 이전 쪽을 붙일 때는 개요 전체가 아니라 이 칸만 바꾼다. 그래프를 다시 그리지 않고 스크롤도 그대로다. */
@@ -1963,38 +1926,6 @@ function replaceChangesPanel() {
   current.replaceWith(next);
   const scroller = next.querySelector('.change-scroll');
   if (scroller) scroller.scrollTop = top;
-}
-
-/**
- * 누가 했나. 에이전트 기록으로 본 변경은 그 에이전트다. 디스크에서 본 변경은 누가 바꿨는지 모르므로
- * 파일을 만든 에이전트를 흐리게 단다 — Codex 가 만든 설정 파일을 앱이 스스로 고친 경우가 실제로 있다.
- * 앱 단위(Codex · Claude Code · Aside)로 단다. 활동 카드와 같은 이름이다.
- */
-function changeAgents(change) {
-  if (change.source === 'agent') return change.collector ? [agentChip(change.collector)] : [];
-  return (change.collectors ?? []).filter((collector) => collector in COLLECTOR_NAME).map((collector) => agentChip(collector, { owner: true }));
-}
-
-function agentChip(collector, { owner = false } = {}) {
-  const name = collectorLabel(collector);
-  return el('span', {
-    className: owner ? 'chip static owner' : 'chip static',
-    attrs: { 'data-provider': PROVIDER_OF_COLLECTOR[collector] ?? collector, title: owner ? t('changes.ownerTitle', { name }) : null },
-  }, name);
-}
-
-/** 라이브러리가 숨긴 종류의 변경. 누르면 그 종류로 좁혀 목록과 이 피드에 보인다. */
-function hiddenChangesLine() {
-  const entries = Object.entries(state.hiddenChanges).filter(([, n]) => n > 0);
-  if (entries.length === 0) return null;
-  return el('p', { className: 'changes-hidden hint' },
-    t('changes.hidden'), ' ',
-    ...entries.flatMap(([kind, n], i) => keep([
-      i > 0 && ' · ',
-      kind === 'temporary'
-        ? el('button', { type: 'button', className: 'link', onclick: () => setShowTemporary(true) }, t('changes.hiddenTemporary', { n }))
-        : el('button', { type: 'button', className: 'link', onclick: () => toggleFilter('kind', kind) }, t('changes.hiddenKind', { kind: kindLabel(kind), n })),
-    ])));
 }
 
 function homeList(title, rows, empty) {
@@ -3186,12 +3117,6 @@ function renderCollectError() {
   renderTitle();
 }
 
-/**
- * 개요 밖(파일 상세 · 규칙 · 수집 범위)에서는 피드가 보이지 않아, 그동안 들어온 변경을 아무 데서도 알 수 없었다.
- * 상단 바에 수로만 적고 누르면 개요로 간다. 토스트를 띄우지 않는다 — 변경은 분당 2건 가까이 들어와(실측 54분에 100건)
- * 늘 떠 있게 되고, 무엇이 바뀌었는지는 피드가 이미 말한다. 수는 피드에 보일 줄 수다: 라이브러리가 숨긴 종류는
- * 빠지고 묶인 이미지는 한 줄이다. 활동 보기는 화면 자체가 새 작업을 보여 주므로 띄우지 않는다.
- */
 let feedSeenId = null;
 const newChangesButton = el('button', {
   type: 'button',
@@ -3207,7 +3132,7 @@ function renderNewChanges() {
   const newest = state.changes[0]?.id ?? 0;
   if (feedSeenId === null || feedVisible()) feedSeenId = Math.max(feedSeenId ?? 0, newest);
   const unseen = state.mode === 'library' ? state.changes.filter((change) => change.id > feedSeenId) : [];
-  const lines = changeGroups(unseen).length;
+  const lines = unseen.length;
   newChangesButton.hidden = lines === 0;
   if (lines === 0) return;
   // 한 쪽보다 많이 밀리면 피드는 첫 쪽만 다시 받는다. 그 너머는 세지 못했으므로 + 를 붙인다.

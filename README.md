@@ -82,7 +82,7 @@ Codex and Claude Code do not keep artifacts in a special folder. But their logs 
 
 ### What the library shows
 
-The library shows documents, web pages, images, spreadsheets, and project folders. output-mesh also collects source code, agent notes, and other formats, but the library hides them. Agent notes are the memory files that Claude Code keeps in `~/.claude/projects/*/memory/`. To see a hidden kind, select it in the Kind filter. The "Recent changes" feed hides the same kinds and shows how many it hid.
+The library shows documents, web pages, images, spreadsheets, and project folders. output-mesh also collects source code, agent notes, and other formats, but the library hides them. Agent notes are the memory files that Claude Code keeps in `~/.claude/projects/*/memory/`. To see a hidden kind, select it in the Kind filter. The "Recent outputs" widget follows the same library filters.
 
 ### Claude Desktop
 
@@ -106,7 +106,7 @@ output-mesh counts a git worktree as part of its main repository. The tree shows
 
 ### Temporary images
 
-From the temporary session folders of Claude Code (`/private/tmp/claude-*/`), output-mesh collects only images, for example screenshots that an agent took with a script. Other files there are work notes and logs, so output-mesh does not collect them. These images show a "temporary" mark next to their location. output-mesh does not copy them, so when Claude Code or a restart deletes the folder, the images leave the library. The "Recent changes" feed shows one line for a set of images from one session.
+From the temporary session folders of Claude Code (`/private/tmp/claude-*/`), output-mesh collects only images, for example screenshots that an agent took with a script. Other files there are work notes and logs, so output-mesh does not collect them. These images show a "temporary" mark next to their location. output-mesh does not copy them, so when Claude Code or a restart deletes the folder, the images leave the library. When shown, these images appear individually in "Recent outputs".
 
 Images from the Codex image generation tool (`~/.codex/generated_images/`) get the same treatment. They carry a "generated" mark instead, because Codex does not delete them.
 
@@ -130,12 +130,12 @@ If you type a search term, the tree changes to a flat list in relevance order. E
 
 ### Overview (right, no file selected)
 
-The overview is a grid of widgets. By default, it shows Recent changes, Final, the activity chart, and the breakdowns by kind, agent, and workspace. If you show temporary images, a Temporary images widget also shows small previews of them, grouped by session. You can also turn on Recent tasks, Collection status, Favorites, Tags, and Recently read.
+The overview is a grid of widgets. By default, it shows Recent outputs, Final, the activity chart, and the breakdowns by kind, agent, and workspace. If you show temporary images, a Temporary images widget also shows small previews of them, grouped by session. You can also turn on Recent tasks, Collection status, Favorites, Tags, and Recently read.
 
 - To move a widget, drag its handle. To change its size, drag its bottom-right corner.
 - Click **Layout** to turn widgets on or off, move them, or restore the default layout. This panel also works with the keyboard.
 
-Recent changes lists each file that an agent created, changed, moved, or removed. Scroll down to see changes from the last 30 days. If output-mesh finds a change more than four hours after the agent made it, the feed does not show that change.
+Recent outputs shows each available file once, using its latest change. Each row shows the filename, document title, location, and time. Repeated edits replace the existing row, and deleted files leave the list. Scroll down to see files from the last 30 days. Changes discovered more than four hours after the agent made them are excluded.
 
 Recently read lists the files that Claude Code and Codex read in the last five minutes. output-mesh keeps this list in memory only and never adds these files to the catalog. Codex has no read tool, so output-mesh infers its reads from `cat`, `sed -n`, `head`, `tail`, and `nl` commands, and it can miss some.
 

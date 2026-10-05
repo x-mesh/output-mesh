@@ -201,7 +201,7 @@ describe('워처와 변경 목록', () => {
     expect(events().map((e) => e.kind)).toEqual(['modified']);
   });
 
-  test('라이브러리 필터를 따르고 사라진 파일의 기록도 보인다', async () => {
+  test('라이브러리 필터를 따르고 현재 사라진 파일은 제외한다', async () => {
     const doc = join(dir, 'guide.md');
     const code = join(dir, 'main.rs');
     writeFileSync(doc, '# 안내서');
@@ -213,8 +213,11 @@ describe('워처와 변경 목록', () => {
 
     const { changes, hidden } = recentChanges(store, '', { view: 'library' });
     expect(hidden).toEqual({ code: 1 });
-    expect(changes.map((c) => [c.file_name, c.change])).toEqual([['guide.md', 'missing'], ['guide.md', 'created']]);
-    expect(changes[0].location).toMatchObject({ dir: '/' });
+    expect(changes).toEqual([]);
+    writeFileSync(doc, '# 돌아온 안내서');
+    await recheckKnownFiles(store);
+    const [restored] = recentChanges(store, '', { view: 'library' }).changes;
+    expect(restored).toMatchObject({ file_name: 'guide.md', change: 'restored', location: { dir: '/' } });
   });
 
   test('디스크에서 본 변경에도 파일을 만든 에이전트가 따라온다 — 화면이 누구 파일인지 달 수 있게', async () => {
@@ -259,6 +262,38 @@ describe('워처와 변경 목록', () => {
     const page = recentChanges(store, '', { view: 'library' }, 10, { after: seen.id });
     expect(page.changes.map((c) => c.file_name)).toEqual(['new.md']);
     expect(page.more).toBe(false);
+  });
+
+  test('반복 수정한 파일은 최신 한 줄만 남고 이전 쪽에서도 다시 나오지 않는다', async () => {
+    for (const name of ['a.md', 'b.md', 'a.md', 'c.md', 'a.md']) {
+      const path = join(dir, name);
+      writeFileSync(path, `${name} ${store.lastEventId()}`);
+      await ingestFile(store, path, codex);
+    }
+    const first = recentChanges(store, '', { view: 'library' }, 2);
+    expect(first.changes.map((row) => row.file_name)).toEqual(['a.md', 'c.md']);
+    expect(first.changes[0].change).toBe('modified');
+    expect(first.more).toBe(true);
+    const second = recentChanges(store, '', { view: 'library' }, 2, { before: first.changes.at(-1).id });
+    expect(second.changes.map((row) => row.file_name)).toEqual(['b.md']);
+    expect(second.more).toBe(false);
+  });
+
+  test('실시간 응답은 고친 파일의 최신 줄과 사라져서 내려야 할 파일을 구분한다', async () => {
+    const edited = join(dir, 'edited.md');
+    const deleted = join(dir, 'deleted.md');
+    writeFileSync(edited, '처음');
+    writeFileSync(deleted, '삭제할 문서');
+    await ingestFile(store, edited, codex);
+    await ingestFile(store, deleted, codex);
+    const seen = store.lastEventId();
+    writeFileSync(edited, '다시 고친 문서');
+    await ingestFile(store, edited, codex);
+    rmSync(deleted);
+    await recheckKnownFiles(store);
+    const update = recentChanges(store, '', { view: 'library' }, 10, { after: seen });
+    expect(update.changes.map((row) => row.file_name)).toEqual(['edited.md']);
+    expect(update.removed).toEqual([idOf(deleted)]);
   });
 
   test('오래된 기록은 지운다', async () => {
