@@ -6,6 +6,7 @@ import { CatalogStore } from '../lib/store.mjs';
 import { Watcher } from '../lib/watcher.mjs';
 import { asideReaders, sourcesStatus } from '../lib/sources.mjs';
 import { collectOnce } from '../lib/collector.mjs';
+import { GeminiDesktopReader } from '../lib/gemini-desktop-reader.mjs';
 import { importPath } from '../lib/importer.mjs';
 import { startServer } from '../lib/server.mjs';
 import { surveyCoverage, REASON_LABEL } from '../lib/coverage.mjs';
@@ -236,6 +237,7 @@ switch (command) {
     // 빈 카탈로그의 첫 수집은 모든 파일이 "새로 생김"이다. 변경 기록을 그걸로 채우지 않는다.
     store.quietEvents = store.isEmpty();
     for (const reader of readers) console.log(await collectOnce(store, reader));
+    console.log({ geminiApp: await new GeminiDesktopReader().sweep(store) });
     store.quietEvents = false;
     console.log(store.counts());
     store.close();

@@ -74,6 +74,7 @@ output-mesh install
 | Claude Code | `~/.claude/projects/**/*.jsonl`, `/private/tmp/claude-<uid>/` 의 세션 작업 폴더 | `Write`, `Edit`, `MultiEdit`, `NotebookEdit` 도구 호출의 `file_path`, 작업 폴더의 이미지 |
 | Claude Desktop | `~/Library/Application Support/Claude/Cache/Cache_Data/` | 로컬 캐시에 남은 아티팩트 HTML, 채팅이 쓴 파일, 채팅 위젯 |
 | Gemini Antigravity | `~/.gemini/{antigravity,antigravity-cli,antigravity-ide}/brain/` | 로컬 세션 산출물과 쓰기 도구가 기록한 파일 경로 |
+| Gemini 앱 | `~/Library/Caches/com.google.GeminiMacOS/Gemini/user<N>/ChatInfo2.store` | macOS용 Gemini 앱의 암호화된 대화 저장소에 남은 산출물. 키는 Keychain에서 읽는다 |
 | Cursor | `~/Library/Application Support/Cursor/.../state.vscdb` | composer가 고치거나 새로 만든 파일. 데이터베이스는 읽기 전용으로 연다 |
 | 내 저장소 | 위 에이전트들이 작업한 저장소와 그 저장소의 git worktree | 최근 7일 안에 바뀐 문서. 그 뒤로는 폴더를 감시해서 새로 생기거나 바뀐 문서를 찾는다 |
 | 그 밖의 파일 | 직접 고른 폴더나 파일 | `output-mesh import <경로>` |
@@ -96,9 +97,26 @@ Claude Desktop 수집은 로컬 Chromium HTTP 캐시만 읽는다. Claude의 비
 
 ### Gemini Antigravity
 
-Gemini 수집은 Antigravity, Antigravity CLI, Antigravity IDE의 로컬 데이터만 읽는다. 세션 산출물과, `write_to_file` 또는 `replace_file_content`가 고친 현재 파일을 모은다. scratch 파일, 업로드, 내부에서 만든 파일, 메타데이터, `.resolved` 파생본, 백업, Gemini 웹 Canvas, 내려받은 이미지는 모으지 않는다. Gemini 계정 파일을 읽거나 Gemini 서비스에 요청을 보내지 않는다. 저장소 파일이 지워졌으면 그 파일은 모으지 않는다.
+Antigravity 수집은 Antigravity, Antigravity CLI, Antigravity IDE의 로컬 데이터만 읽는다. 세션 산출물과, `write_to_file` 또는 `replace_file_content`가 고친 현재 파일을 모은다. scratch 파일, 업로드, 내부에서 만든 파일, 메타데이터, `.resolved` 파생본, 백업, Gemini 웹 Canvas, 내려받은 이미지는 모으지 않는다. Gemini 계정 파일을 읽거나 Gemini 서비스에 요청을 보내지 않는다. 저장소 파일이 지워졌으면 그 파일은 모으지 않는다.
 
 Antigravity 대화 기록에는 JSON이 아닌 줄이 가끔 섞여 있다. output-mesh는 그 줄만 건너뛰고 줄마다 경고를 한 번 남긴다. 경고는 수집 오류가 아니다.
+
+### Gemini 앱
+
+macOS용 Gemini 앱은 대화를 암호화한 저장소에 둔다. output-mesh는 그 저장소를 읽기 전용으로 열고, Keychain 항목 `Gemini Safe Storage`에서 키를 읽어 대화를 메모리에서 푼다. 모으는 것은 Gemini가 만든 산출물뿐이고, 내가 보낸 메시지와 올린 파일은 모으지 않는다.
+
+- HTML 페이지와 마크다운 문서
+- Gemini가 답에 붙인 파일(PDF, PNG, DOCX, XLSX, PPTX 등)
+- 생성한 이미지
+- Gemini가 만든 Google 문서, 스프레드시트, 프레젠테이션. 각각 마크다운, XLSX, PPTX로 내보낸다.
+
+모은 산출물은 `~/Library/Application Support/AgentOutputCatalog/Gemini-app-artifacts/`에 사본으로 둔다.
+
+저장소에 주소만 남는 산출물도 있다. 생성한 이미지와 첨부 파일은 Google 서버에서 내려받는다. Google 문서, 스프레드시트, 프레젠테이션은 Google Workspace CLI(`gws`, Homebrew 포뮬러 `googleworkspace-cli`)로 받는데, `gws`는 내 Google 계정으로 요청한다. 한 번 수집할 때 최대 2개를 받는다. 이미지와 첨부 파일은 한 번만 받는다. Google 문서, 스프레드시트, 프레젠테이션은 한 시간마다 다시 확인하고, 받지 못한 파일은 한 시간 뒤에 다시 시도한다. `gws`가 없으면 이 문서들을 받지 못하고 수집 오류를 남긴다.
+
+처음 Keychain 항목을 읽을 때 macOS가 허용할지 물을 수 있다. 거부하면 output-mesh를 다시 시작할 때까지 Gemini 앱 수집이 멈춘다. Google이 저장소 형식을 바꾸면 이 출처는 멈출 수 있다.
+
+Gemini 앱 수집을 끄려면 `OUTPUT_MESH_NO_GEMINI_APP=1`을 설정한다. 그러면 Keychain 항목을 읽지 않고, Gemini 산출물을 받으려는 요청도 보내지 않는다.
 
 ### 저장소와 worktree
 
@@ -216,9 +234,9 @@ output-mesh --version        # 버전 (탐색기 아래쪽에도 보인다)
 ## 하지 않는 것
 
 - **원본에 쓰기.** 세션 폴더, 로그, 저장소는 읽기만 한다. Aside의 `state.db`도 읽기 전용으로 연다.
-- **파일 복사.** 색인은 원본 파일을 가리키기만 한다. 예외는 Claude Desktop 하나다. 캐시 항목은 파일이 아니어서 카탈로그 폴더에 사본을 둔다.
+- **파일 복사.** 색인은 원본 파일을 가리키기만 한다. 예외는 Claude Desktop과 Gemini 앱이다. 두 앱의 산출물은 파일이 아니어서 카탈로그 폴더에 사본을 둔다.
 - **네트워크에 열기.** 서버는 `127.0.0.1`에서만 연결을 받는다.
-- **내 정보를 바깥으로 보내기.** 시작할 때 npm 레지스트리에 최신 버전을 한 번 묻고, 사용자에 관한 정보는 싣지 않는다. 끄려면 `OUTPUT_MESH_NO_UPDATE_CHECK=1` 을 설정한다. Tailscale을 쓰면 tailnet 안의 다른 기기에 output-mesh가 도는지도 묻는다.
+- **내 정보를 바깥으로 보내기.** 시작할 때 npm 레지스트리에 최신 버전을 한 번 묻고, 사용자에 관한 정보는 싣지 않는다. 끄려면 `OUTPUT_MESH_NO_UPDATE_CHECK=1` 을 설정한다. Tailscale을 쓰면 tailnet 안의 다른 기기에 output-mesh가 도는지도 묻는다. Gemini 앱 수집은 Google 서버에서 산출물을 내려받고, `gws`는 내 Google 계정으로 Google Drive API를 부른다. 이 Gemini 요청을 끄려면 `OUTPUT_MESH_NO_GEMINI_APP=1`을 설정한다.
 - **에이전트가 만든 HTML이 바깥에 요청하기.** 미리보기는 같은 출처 권한이 없는 격리 프레임에서 `connect-src 'none'`으로 그린다. 스크립트는 파일마다 허용하기 전까지 막혀 있고, 허용해도 네트워크는 닫혀 있다. 예외가 하나 있다. draw.io 미리보기는 도면 파일이 가리키는 도형 이미지를 불러온다.
 
 카탈로그는 `~/Library/Application Support/AgentOutputCatalog/catalog.db`에 있다. 태그, 메모, 즐겨찾기, 최종본 표시를 빼면 모두 디스크에서 다시 만들 수 있고, 이 네 가지는 수집이 덮어쓰지 않는다.
