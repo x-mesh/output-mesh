@@ -101,20 +101,34 @@ Antigravity 수집은 Antigravity, Antigravity CLI, Antigravity IDE의 로컬 �
 
 Antigravity 대화 기록에는 JSON이 아닌 줄이 가끔 섞여 있다. output-mesh는 그 줄만 건너뛰고 줄마다 경고를 한 번 남긴다. 경고는 수집 오류가 아니다.
 
+output-mesh는 Gemini CLI 세션(`~/.gemini/tmp/`)과 웹 브라우저에 남은 Gemini 데이터를 읽지 않는다.
+
 ### Gemini 앱
 
 macOS용 Gemini 앱은 대화를 암호화한 저장소에 둔다. output-mesh는 그 저장소를 읽기 전용으로 열고, Keychain 항목 `Gemini Safe Storage`에서 키를 읽어 대화를 메모리에서 푼다. 모으는 것은 Gemini가 만든 산출물뿐이고, 내가 보낸 메시지와 올린 파일은 모으지 않는다.
 
 - HTML 페이지와 마크다운 문서
-- Gemini가 답에 붙인 파일(PDF, PNG, DOCX, XLSX, PPTX 등)
+- Gemini가 답에 붙인 문서, 스프레드시트, 프레젠테이션, 텍스트, 이미지 파일(PDF, DOCX, XLSX, PPTX, CSV, PNG 등)
 - 생성한 이미지
 - Gemini가 만든 Google 문서, 스프레드시트, 프레젠테이션. 각각 마크다운, XLSX, PPTX로 내보낸다.
 
+그 밖의 형식으로 붙은 파일은 건너뛴다. 건너뛴 파일 수는 `output-mesh sweep` 출력의 `unsupported`에 나온다. 16MB를 넘는 파일은 모으지 않는다.
+
 모은 산출물은 `~/Library/Application Support/AgentOutputCatalog/Gemini-app-artifacts/`에 사본으로 둔다.
 
-저장소에 주소만 남는 산출물도 있다. 생성한 이미지와 첨부 파일은 Google 서버에서 내려받는다. Google 문서, 스프레드시트, 프레젠테이션은 Google Workspace CLI(`gws`, Homebrew 포뮬러 `googleworkspace-cli`)로 받는데, `gws`는 내 Google 계정으로 요청한다. 한 번 수집할 때 최대 2개를 받는다. 이미지와 첨부 파일은 한 번만 받는다. Google 문서, 스프레드시트, 프레젠테이션은 한 시간마다 다시 확인하고, 받지 못한 파일은 한 시간 뒤에 다시 시도한다. `gws`가 없으면 이 문서들을 받지 못하고 수집 오류를 남긴다.
+저장소에 주소만 남는 산출물도 있다. 생성한 이미지와 첨부 파일은 Google 서버에서 내려받는다. Google 문서, 스프레드시트, 프레젠테이션은 Google Workspace CLI(`gws`)로 받는데, `gws`는 내 Google 계정으로 요청한다. 한 번 수집할 때 최대 2개를 받는다. 이미지와 첨부 파일은 한 번만 받는다. Google 문서, 스프레드시트, 프레젠테이션은 한 시간마다 다시 확인하고, 받지 못한 파일은 한 시간 뒤에 다시 시도한다. `gws`가 없거나 로그인하지 않았으면 이 문서들을 받지 못하고 수집 오류를 남긴다.
 
-처음 Keychain 항목을 읽을 때 macOS가 허용할지 물을 수 있다. 거부하면 output-mesh를 다시 시작할 때까지 Gemini 앱 수집이 멈춘다. Google이 저장소 형식을 바꾸면 이 출처는 멈출 수 있다.
+Google 문서, 스프레드시트, 프레젠테이션을 받으려면 `gws`를 한 번 설정하고 내 Google 계정으로 로그인한다.
+
+```bash
+brew install googleworkspace-cli
+gws auth setup
+gws auth login -s drive
+```
+
+`gws auth setup`은 Google Cloud 프로젝트와 OAuth 클라이언트를 설정하며, `gcloud` CLI가 있어야 한다. OAuth 클라이언트를 직접 만들려면 [`gws` README](https://github.com/googleworkspace/cli)를 본다. `-s drive`는 로그인할 때 고를 수 있는 권한을 Google Drive로 한정한다. `gws` README는 `gws`가 Google이 공식 지원하는 제품이 아니라고 밝힌다.
+
+output-mesh는 시작할 때마다 Keychain 항목을 한 번 읽고, 이때 macOS가 허용할지 물을 수 있다. 거부하거나 30초 안에 답하지 않으면 output-mesh를 다시 시작할 때까지 Gemini 앱 수집이 멈춘다. Google이 저장소 형식을 바꾸면 이 출처는 멈출 수 있다.
 
 Gemini 앱 수집을 끄려면 `OUTPUT_MESH_NO_GEMINI_APP=1`을 설정한다. 그러면 Keychain 항목을 읽지 않고, Gemini 산출물을 받으려는 요청도 보내지 않는다.
 
