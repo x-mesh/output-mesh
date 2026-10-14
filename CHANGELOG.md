@@ -8,6 +8,8 @@ lives in `package.json`; `output-mesh --version` and the explorer footer show it
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-10-14
+
 ### Added
 
 - **gemini:** collect outputs from the Gemini macOS app: HTML pages, Markdown documents, attached files, generated images, and Google Docs, Sheets, and Slides. The app keeps chats in an encrypted store, so output-mesh reads the key from the Keychain and keeps a copy of each output. Outputs that the store keeps only as an address come from Google servers, and Docs, Sheets, and Slides come through the Google Workspace CLI (`gws`). Set `OUTPUT_MESH_NO_GEMINI_APP=1` to turn this source off.
