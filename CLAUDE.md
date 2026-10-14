@@ -29,6 +29,8 @@ bun bin/output-mesh.mjs start|stop|restart|status|uninstall
 | `lib/cursor-reader.mjs` | Cursor `state.vscdb` 읽기 전용. composer 가 고친 파일 |
 | `lib/claude-desktop-reader.mjs` | Claude 데스크톱 앱의 HTTP 캐시 읽기 전용. 아티팩트 HTML · 채팅이 쓴 파일 · 위젯을 카탈로그 폴더에 옮겨 적는다 |
 | `lib/gemini-reader.mjs` | Gemini Antigravity `brain/<세션>` 읽기 전용. 세션 산출물과 쓰기 도구가 고친 파일의 경로 |
+| `lib/gemini-desktop-reader.mjs` | Gemini 데스크톱 앱의 암호화한 대화 저장소 읽기 전용. Keychain 키로 풀어 산출물을 카탈로그 폴더에 옮겨 적는다 |
+| `lib/gemini-downloads.mjs` | Gemini 앱 산출물 가운데 주소만 남은 것을 Google 호스트와 `gws` 로 받는다 |
 | `lib/session-logs.mjs` | Codex rollout · Claude Code transcript 에서 쓴 경로 수확 |
 | `lib/collector.mjs` | 스윕 · 보강 · 색인 |
 | `lib/store.mjs` + `schema.sql` | SQLite 인덱스 |
@@ -84,7 +86,7 @@ bun bin/output-mesh.mjs start|stop|restart|status|uninstall
 - **404 는 오류가 아니다.** 지운 대화의 404 응답도 캐시에 남는다(실측 3건). 서버의 답이라 `entry_invalid` 로 세지 않는다.
 - **본문은 Simple Cache 구조대로 읽는다.** 키 뒤가 본문이고 EOF 매직(`d8410d97456ffaf4`) 뒤가 HTTP 헤더다. 본문은 content-encoding 그대로 저장돼 있다. 프레임과 메타데이터도 이 파서 하나로 읽는다. 예전에 쓰던 추정 경로(바이트마다 압축 시작을 찾아 풀어 보던 것)는 실제 구조의 brotli 본문을 읽지 못했고, 실제 캐시 수집의 최대 메모리가 419MB 에서 274MB 로 줄었다. 사이트별로 나눈 캐시 키(`1/0/_dk_<사이트> <사이트> <주소>`)도 마지막 조각을 주소로 읽는다. 지금 키는 모두 `1/0/<주소>` 다.
 - **대소문자만 다른 경로는 하나로 묶는다.** APFS 는 대소문자를 가리지 않아서, `Plan.md` 와 `plan.md` 를 따로 쓰면 한 파일을 번갈아 덮어써 수집마다 바뀜이 남는다. 나중 것이 이긴다.
-- **사본을 둔다.** 캐시 항목은 참조할 수 있는 파일이 아니고, 캐시는 언제든 밀려난다. `AgentOutputCatalog/claude-app-artifacts/` 아래에 프레임은 `<uuid>.html`, 채팅 파일은 `<대화 uuid>/<outputs 아래 경로>`, 위젯은 `<대화 uuid>/widgets/<제목>.html` 로 옮겨 적고 그 파일을 색인한다. "아티팩트 파일을 복사하지 않는다"의 유일한 예외다.
+- **사본을 둔다.** 캐시 항목은 참조할 수 있는 파일이 아니고, 캐시는 언제든 밀려난다. `AgentOutputCatalog/claude-app-artifacts/` 아래에 프레임은 `<uuid>.html`, 채팅 파일은 `<대화 uuid>/<outputs 아래 경로>`, 위젯은 `<대화 uuid>/widgets/<제목>.html` 로 옮겨 적고 그 파일을 색인한다. "아티팩트 파일을 복사하지 않는다"의 예외는 이것과 Gemini 앱 둘이다.
 - **건너뛰는 기준은 카탈로그다.** 사본은 카탈로그를 다시 만들어도 남는다. 사본이 같다는 것만으로 건너뛰면 새 카탈로그가 그 아티팩트를 영영 받지 못한다. 카탈로그가 그 버전(프레임은 `claude.version.<uuid>`, 나머지는 `claude.file.<경로>` 의 내용 해시)을 받았고 사본도 같을 때만 건너뛴다.
 - **세션 로그와 같은 조건으로 돈다.** 실제 홈의 캐시(실측 18,046개, 837MB)를 훑고 카탈로그 폴더에 쓰기 때문이다. 조건이 없을 때는 `withSessionLogs` 를 끈 워처 테스트가 실제 폴더에 사본을 남겼다.
 - **캐시 폴더는 감시하지 않는다.** 아티팩트와 무관한 응답에도 그 폴더가 바뀌고(실측: 조사하던 10분에 6번, 1시간에 12번), 바뀔 때마다 3초 뒤 모든 수집기가 다시 돈다. 30초 주기 수집이 잡는다.
@@ -94,6 +96,17 @@ bun bin/output-mesh.mjs start|stop|restart|status|uninstall
 
 - **그 줄만 건너뛰고 경고로 남긴다**(`gemini_line_skipped`, 파일 경로와 몇째 줄). 수집 에러(`gemini_entry_invalid`)는 폴더나 파일을 읽지 못했을 때만이다.
 - **같은 줄은 한 번만 알린다.** 프로세스 안에서는 리더가 경로 · 줄 번호 · 이유로 기억하고, 재시작 뒤에는 카탈로그에 같은 경고가 있는지 본다(`hasIngestEvent`). 수집 기록은 변경 기록과 함께 `EVENT_RETENTION_DAYS` 가 지나면 지워지므로, 그 뒤에 한 번 더 남는다. 재시작마다 다시 남기던 때는 같은 6줄이 한 시간에 30건 쌓였고, 최근 기록을 잘라 오류를 거르던 화면에서 오류가 밀려났다.
+
+**Gemini 앱은 암호화한 저장소를 풀어 읽고 사본을 둔다.** macOS용 Gemini 앱은 대화를 `~/Library/Caches/com.google.GeminiMacOS/Gemini/user<N>/ChatInfo2.store` 에 두고 행 본문(`ZENCRYPTEDPROTOBYTES`)을 AES-256-GCM 으로 암호화한다(실측 바이트당 엔트로피 8.0). 키 묶음은 Keychain 항목 `Gemini Safe Storage` / `Gemini Keys` 에 있다. 앱의 HTTP 캐시에는 생성 이미지 항목이 남아도 실제 파일은 이미 밀려나 있었다(실측 47건 모두).
+
+- **Keychain 은 프로세스마다 한 번만 읽는다.** 거부되면 다시 시작할 때까지 묻지 않는다.
+- **모델의 차례만 본다**(`ZISUSERTURN = 0`). 사용자가 올린 파일은 산출물이 아니다. 산출물 자리(HTML · 마크다운 · 첨부 · 생성 이미지 · Docs 카드)만 읽어 일반 채팅을 파일로 오인하지 않는다.
+- **받지 않는 형식은 건너뛰고 센다**(`unsupported`). 처음에는 예외를 던졌는데, `.py` 첨부 하나가 그 계정의 뒤 산출물까지 모두 멈췄다. 깨진 행도 그 행만 건너뛰고 오류로 센다. 바뀌지 않은 깨진 행은 다시 풀지 않는다.
+- **주소만 남은 산출물은 받는다.** 생성 이미지와 첨부는 `fetch`(https, Google 호스트만, 리디렉션마다 다시 검사, 16MB, 파일 서명 확인)로, Drive 문서는 `gws drive files get` · `export` 로 받는다. 수집마다 최대 2개다. 이미지와 첨부는 주소가 그대로면 다시 받지 않고, Drive 문서만 `GEMINI_APP_RECHECK_MS`(1시간)마다 메타데이터로 다시 확인한다. 5분마다 다시 받던 때는 받아 둔 파일마다 요청이 끊이지 않았다. 재시작 뒤에는 카탈로그에 남긴 내용 해시와 같은 사본이 있으면 받은 것으로 본다.
+- **같은 실패는 한 번만 기록한다.** 상태(`gemini.app.last_sweep_code`)가 바뀔 때만 수집 오류를 남긴다. 수집마다 남기던 때는 Keychain 거부 하나로 시간당 120건이 쌓였다.
+- **`OUTPUT_MESH_NO_GEMINI_APP=1` 로 끈다.** 끄면 Keychain 도 읽지 않고 Google 에 요청하지도 않는다.
+- **사본 폴더 이름은 `Gemini-app-artifacts` 그대로 둔다.** `claude-app-artifacts` 와 대소문자를 맞추면 `path_key` 가 달라져, 이미 색인한 사본이 두 벌이 된다.
+- **출처의 수집기는 Antigravity 와 같은 `gemini` 다.** `session_ref` 가 `gemini-app:<계정>:<대화>` 라서 활동 보기에서 갈린다. 상태 목록(`sourcesStatus`)에서만 `gemini-app` 으로 나눈다. 둘 다 `gemini` 일 때는 시작 화면의 `Missing` 줄이 어느 쪽을 가리키는지 알 수 없었다.
 
 **Codex·Claude Code 는 산출물이 아니라 출처를 준다.** 둘 다 산출물 레코드가 없지만 세션 로그에 쓴 경로가 남는다 — Codex 는 `apply_patch` 본문의 `*** Add/Update File:` 마커(1,236개 중 321개), Claude Code 는 `tool_use` 블록의 `file_path`. 그 경로의 파일은 이미 저장소 안에 있으므로 옮기지 않고 출처만 붙인다. Aside 가 주지 못하는 `workspace` 가 여기서 채워진다. 자동 발견분은 산출물 플래그가 없으므로 절대 `final` 로 올리지 않는다.
 
@@ -251,7 +264,7 @@ bun bin/output-mesh.mjs start|stop|restart|status|uninstall
 
 ## Conventions
 
-- 런타임 의존성을 추가하지 않는다. `bun:sqlite`, `node:*`, macOS 기본 도구만.
+- 런타임 의존성을 추가하지 않는다. `bun:sqlite`, `node:*`, macOS 기본 도구만. 예외는 Gemini 앱의 Drive 문서를 받는 `gws`(Google Workspace CLI) 하나다. 없으면 그 문서만 받지 못하고(`gws_unavailable`) 나머지 수집은 그대로다.
 - 브라우저 라이브러리는 `public/vendor/`에 버전을 고정해 넣는다 (x-dashboard 관례). 패키지 매니저를 끌어오지 않는다.
 - 렌더한 마크다운도 에이전트가 만든 내용이다. `sandbox=""` iframe 안에서만 그리고, `srcdoc`은 서버 CSP 헤더가 덮지 못하므로 문서 안에 meta CSP를 넣는다.
 - 경로 비교·조회는 `path_key`(NFC)로만, 파일 읽기는 `abs_path`(원본 바이트)로만. macOS `readdir`은 NFD를 준다.
@@ -300,11 +313,12 @@ macOS. bun ≥ 1.3. 시스템 `unzip`(xlsx 본문 추출). Aside가 없으면 �
 
 - 원본 폴더와 에이전트 데이터에 **쓰지 않는다**. `state.db`는 readonly 연결로만 연다.
 - 아티팩트 파일을 복사하지 않는다. 인덱스는 원본을 참조만 한다.
-- **복사의 예외는 Claude 데스크톱 앱 하나다.** 원본이 파일이 아니라 앱의 HTTP 캐시 항목이라 참조할 경로가 없다. 캐시에서 되살린 본문(아티팩트 HTML · 채팅이 쓴 파일 · 위젯)만 카탈로그 폴더의 `claude-app-artifacts/` 에 옮겨 적고, Claude 의 폴더에는 쓰지 않는다.
+- **복사의 예외는 Claude 데스크톱 앱과 Gemini 앱 둘이다.** 원본이 파일이 아니라 앱의 HTTP 캐시 항목(Claude)과 암호화한 대화 행(Gemini)이라 참조할 경로가 없다. 되살린 본문만 카탈로그 폴더의 `claude-app-artifacts/` · `Gemini-app-artifacts/` 에 옮겨 적고, 두 앱의 폴더에는 쓰지 않는다.
 - 아티팩트 HTML은 `connect-src 'none'` CSP와 `allow-same-origin` 없는 iframe에서만 렌더한다. 스크립트를 허용해도 스크립트가 네트워크를 부를 길은 열리지 않는다.
 - **예외는 drawio 의 도형 이미지 하나다.** `img-src` 에만 `https:` 를 허용한다. 막으면 구성도의 아이콘이 통째로 빈 칸이 되어(실측 306개 중 상대경로 221건 · 절대 주소 195건) 도면을 읽을 수 없었다. 대가는 분명하다 — 미리보기를 여는 순간 그 주소로 요청이 나가고, **주소는 문서를 만든 쪽이 정한다.** 이미지 말고는 아무것도 열지 않는다.
 - 서버는 `127.0.0.1`에만 바인딩한다.
-- **바깥으로 나가는 요청은 새 버전 조회 하나다**(`lib/update-check.mjs`). `serve` 시작 때 npm 레지스트리의 `latest` 를 GET 으로 한 번 읽고 시작 화면에 `Update` 줄을 더한다. 아무것도 싣지 않고, 2초 안에 못 받으면 조용히 건너뛰며, `OUTPUT_MESH_NO_UPDATE_CHECK=1` 로 끈다. 기본은 켠다 — 꺼 두면 알림이 목적을 못 이룬다. 수집과 나란히 돌지만 수집이 빠른 시작에서는 먼저 끝나지 못해, 안 기다렸을 때는 안내가 거의 나오지 않았다.
+- **바깥으로 나가는 요청은 Gemini 앱 산출물 받기를 빼면 새 버전 조회 하나다.** Gemini 앱 저장소에 주소만 남은 산출물은 Google 호스트에서 받고, Drive 문서는 사용자의 Google 계정으로 `gws` 를 불러 받는다. 아무것도 싣지 않는 GET 과 달리 계정으로 하는 요청이다. `OUTPUT_MESH_NO_GEMINI_APP=1` 이 Gemini 앱 수집 전체를 끈다. 기본은 켠다(프로젝트 소유자의 결정).
+- **새 버전 조회**(`lib/update-check.mjs`). `serve` 시작 때 npm 레지스트리의 `latest` 를 GET 으로 한 번 읽고 시작 화면에 `Update` 줄을 더한다. 아무것도 싣지 않고, 2초 안에 못 받으면 조용히 건너뛰며, `OUTPUT_MESH_NO_UPDATE_CHECK=1` 로 끈다. 기본은 켠다 — 꺼 두면 알림이 목적을 못 이룬다. 수집과 나란히 돌지만 수집이 빠른 시작에서는 먼저 끝나지 못해, 안 기다렸을 때는 안내가 거의 나오지 않았다.
 - 사용자 소유 데이터(태그·메모·즐겨찾기·final)는 스윕이 덮어쓰지 않는다.
 - 무엇이 왜 제외됐는지는 항상 확인 가능해야 한다 (PRD 7.1). `coverage`가 그 답이다.
 - 모든 아티팩트는 출처를 하나 이상 가진다. `counts().artifactsWithoutOrigin` 은 항상 0 이어야 한다 — 출처가 없는 아티팩트는 칩도 활동 보기도 없이 조용히 사라진다.

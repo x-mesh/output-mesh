@@ -197,3 +197,49 @@ test('bounds remote work and eventually processes every output', async () => {
   expect(calls).toBe(5); expect(store.counts().artifacts).toBe(6);
   expect([...app.remoteCache.values()].every((item) => !item.body)).toBe(true);
 });
+
+const eventCount = (code) => store.db.query('SELECT COUNT(*) AS n FROM ingest_events WHERE code = ?').get(code).n;
+
+test('logs a repeated failure once instead of on every sweep', async () => {
+  const denied = reader(async () => { throw new Error('denied'); });
+  for (let i = 0; i < 5; i++) await denied.sweep(store);
+  expect(eventCount('gemini_app_key_unavailable')).toBe(1);
+  addMessage(2, tree(documentCard('Unavailable.md')), 0, 200);
+  const offline = new GeminiDesktopReader({ cacheRoot: cache, outputDir: output, loadKeys: async () => keys, loadRemote: async () => { throw new Error('offline'); } });
+  for (let i = 0; i < 5; i++) await offline.sweep(store);
+  expect(eventCount('gemini_app_remote_unavailable')).toBe(1);
+});
+
+test('skips unsupported files and broken rows without stopping later rows', async () => {
+  addMessage(2, tree(proto([35, proto([1, proto([3, 'app.py'], [9, 2], [12, 'text/x-python'], [26, 'print(1)'])])])), 0, 50);
+  const skipped = await reader().sweep(store);
+  expect(skipped).toMatchObject({ code: 'ok', inserted: 1, unsupported: 1 });
+  const broken = encrypted(message(html.replace('initial', 'broken'), 'im_broken')); broken[broken.length - 1] ^= 1;
+  addMessage(3, Buffer.alloc(0), 0, 60);
+  db.query('UPDATE ZCHATMESSAGESTOREDMODEL SET ZENCRYPTEDPROTOBYTES = ? WHERE Z_PK = 3').run(broken);
+  addMessage(4, message(html.replace('initial', 'later'), 'im_later'), 0, 300);
+  const result = await reader().sweep(store);
+  expect(result.code).toBe('entry_invalid'); expect(result.inserted).toBe(1);
+  expect(store.counts().artifacts).toBe(2);
+});
+
+test('downloads a generated image once, also after a restart', async () => {
+  addMessage(2, tree(proto([21, proto([1, proto([2, 'https://lh3.googleusercontent.com/gg/generated'], [7, 'image1'])])])), 0, 200);
+  let calls = 0;
+  const png = Buffer.from('89504e470d0a1a0a00000000', 'hex');
+  const app = () => new GeminiDesktopReader({ cacheRoot: cache, outputDir: output, loadKeys: async () => keys, loadRemote: async () => { calls++; return { body: png, extension: 'png' }; } });
+  const first = app();
+  await first.sweep(store);
+  for (const cached of first.remoteCache.values()) expect(cached.retryAt).toBe(Infinity);
+  await first.sweep(store);
+  expect((await app().sweep(store)).unchanged).toBe(2);
+  expect(calls).toBe(1);
+});
+
+test('the opt-out reads no Keychain and writes nothing', async () => {
+  let calls = 0;
+  const app = new GeminiDesktopReader({ cacheRoot: cache, outputDir: output, env: { OUTPUT_MESH_NO_GEMINI_APP: '1' }, loadKeys: async () => { calls++; return keys; } });
+  expect((await app.sweep(store)).code).toBe('disabled');
+  expect(calls).toBe(0); expect(existsSync(output)).toBe(false);
+  expect(store.getState('gemini.app.last_sweep_code')).toBe('disabled');
+});

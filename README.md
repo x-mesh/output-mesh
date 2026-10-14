@@ -112,9 +112,11 @@ The Gemini app for macOS keeps its chats in an encrypted store. output-mesh open
 
 output-mesh keeps a copy of each output in `~/Library/Application Support/AgentOutputCatalog/Gemini-app-artifacts/`.
 
-For some outputs, the store keeps only an address. output-mesh downloads generated images and attached files from Google servers. It gets Docs, Sheets, and Slides with the Google Workspace CLI (`gws`, Homebrew formula `googleworkspace-cli`), and `gws` uses your Google account. output-mesh downloads at most 2 files each time it collects, and it checks each downloaded file again after 5 minutes. Without `gws`, output-mesh cannot get Docs, Sheets, and Slides, and it records a collection error.
+For some outputs, the store keeps only an address. output-mesh downloads generated images and attached files from Google servers. It gets Docs, Sheets, and Slides with the Google Workspace CLI (`gws`, Homebrew formula `googleworkspace-cli`), and `gws` uses your Google account. output-mesh downloads at most 2 files each time it collects. It downloads an image or an attached file only once. It checks Docs, Sheets, and Slides again every hour, and it tries a failed download again after one hour. Without `gws`, output-mesh cannot get Docs, Sheets, and Slides, and it records a collection error.
 
 When output-mesh reads the Keychain item for the first time, macOS can ask you for permission. If you deny access, Gemini app collection stops until output-mesh starts again. If Google changes the store format, this source can stop.
+
+To turn off Gemini app collection, set `OUTPUT_MESH_NO_GEMINI_APP=1`. output-mesh then does not read the Keychain item and sends no requests for Gemini outputs.
 
 ### Repositories and worktrees
 
@@ -234,7 +236,7 @@ The catalog database does not reclaim free space automatically. If the startup s
 - **Write to your sources.** output-mesh only reads session folders, logs, and repositories. It opens Aside's `state.db` in read-only mode.
 - **Copy your files.** The index points to the original files. Claude Desktop and the Gemini app are the exceptions: their outputs are not files, so output-mesh keeps a copy in its own catalog folder.
 - **Listen on the network.** The server listens only on `127.0.0.1`.
-- **Send your data out.** At startup, output-mesh asks the npm registry once for the latest version and sends no data about you. To turn this off, set `OUTPUT_MESH_NO_UPDATE_CHECK=1`. If you use Tailscale, it also asks the other machines in your tailnet whether they run output-mesh. Gemini app collection downloads outputs from Google servers, and `gws` calls the Google Drive API with your Google account. No setting turns these Gemini requests off.
+- **Send your data out.** At startup, output-mesh asks the npm registry once for the latest version and sends no data about you. To turn this off, set `OUTPUT_MESH_NO_UPDATE_CHECK=1`. If you use Tailscale, it also asks the other machines in your tailnet whether they run output-mesh. Gemini app collection downloads outputs from Google servers, and `gws` calls the Google Drive API with your Google account. To turn these Gemini requests off, set `OUTPUT_MESH_NO_GEMINI_APP=1`.
 - **Let agent HTML send requests.** Previews show in sandboxed frames with no same-origin access, under `connect-src 'none'`. Scripts stay blocked until you allow them for a file. The network stays closed for scripts that you allow. One exception: a draw.io preview can load the shape images that the diagram file links to.
 
 Your catalog is in `~/Library/Application Support/AgentOutputCatalog/catalog.db`. output-mesh can rebuild all of it from disk, except your tags, notes, favorites, and final marks. Collection never overwrites those four.
