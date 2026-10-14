@@ -74,6 +74,7 @@ On macOS, `install` adds a LaunchAgent. On Linux, it adds a systemd user unit. U
 | Claude Code | `~/.claude/projects/**/*.jsonl` and the session scratch folders in `/private/tmp/claude-<uid>/` | The `file_path` of `Write`, `Edit`, `MultiEdit`, and `NotebookEdit` tool calls, and the images in the scratch folders |
 | Claude Desktop | `~/Library/Application Support/Claude/Cache/Cache_Data/` | Artifact HTML, files that chats wrote, and chat widgets from the local cache |
 | Gemini Antigravity | `~/.gemini/{antigravity,antigravity-cli,antigravity-ide}/brain/` | Local session artifacts and the paths from write tool calls |
+| Gemini app | `~/Library/Caches/com.google.GeminiMacOS/Gemini/user<N>/ChatInfo2.store` | Outputs in the encrypted chat store of the Gemini macOS app. Reads the key from the Keychain |
 | Cursor | `~/Library/Application Support/Cursor/.../state.vscdb` | Files that a composer changed or created. Opens the database in read-only mode |
 | Your repositories | The repositories that the agents above worked in, and the git worktrees of those repositories | Documents that changed in the last 7 days. After that, a folder watch finds new and changed documents |
 | Other files | A folder or a file that you select | `output-mesh import <path>` |
@@ -96,9 +97,24 @@ The cache keeps only the conversations that you opened in Claude Desktop. output
 
 ### Gemini Antigravity
 
-Gemini collection reads only local data from Antigravity, Antigravity CLI, and Antigravity IDE. It collects session artifacts and the current files that `write_to_file` or `replace_file_content` changed. It does not collect scratch files, uploads, generated internal files, metadata, `.resolved` revisions, backups, Gemini web Canvas, or downloaded images. It does not read Gemini account files or send requests to Gemini services. If a repository file no longer exists, output-mesh does not collect it.
+Antigravity collection reads only local data from Antigravity, Antigravity CLI, and Antigravity IDE. It collects session artifacts and the current files that `write_to_file` or `replace_file_content` changed. It does not collect scratch files, uploads, generated internal files, metadata, `.resolved` revisions, backups, Gemini web Canvas, or downloaded images. It does not read Gemini account files or send requests to Gemini services. If a repository file no longer exists, output-mesh does not collect it.
 
 Some lines in Antigravity transcripts are not valid JSON. output-mesh skips each of these lines and records one warning for it. A warning is not a collection error.
+
+### Gemini app
+
+The Gemini app for macOS keeps its chats in an encrypted store. output-mesh opens the store in read-only mode, reads the key from the Keychain item `Gemini Safe Storage`, and decrypts each chat in memory. It collects only the outputs that Gemini made, not your messages or uploads:
+
+- HTML pages and Markdown documents.
+- Files that Gemini attached to a reply, for example PDF, PNG, DOCX, XLSX, or PPTX.
+- Generated images.
+- Google Docs, Sheets, and Slides that Gemini made. output-mesh exports them as Markdown, XLSX, and PPTX.
+
+output-mesh keeps a copy of each output in `~/Library/Application Support/AgentOutputCatalog/Gemini-app-artifacts/`.
+
+For some outputs, the store keeps only an address. output-mesh downloads generated images and attached files from Google servers. It gets Docs, Sheets, and Slides with the Google Workspace CLI (`gws`, Homebrew formula `googleworkspace-cli`), and `gws` uses your Google account. output-mesh downloads at most 2 files each time it collects, and it checks each downloaded file again after 5 minutes. Without `gws`, output-mesh cannot get Docs, Sheets, and Slides, and it records a collection error.
+
+When output-mesh reads the Keychain item for the first time, macOS can ask you for permission. If you deny access, Gemini app collection stops until output-mesh starts again. If Google changes the store format, this source can stop.
 
 ### Repositories and worktrees
 
@@ -216,9 +232,9 @@ The catalog database does not reclaim free space automatically. If the startup s
 ## What it does not do
 
 - **Write to your sources.** output-mesh only reads session folders, logs, and repositories. It opens Aside's `state.db` in read-only mode.
-- **Copy your files.** The index points to the original files. Claude Desktop is the only exception: its cache entries are not files, so output-mesh keeps a copy in its own catalog folder.
+- **Copy your files.** The index points to the original files. Claude Desktop and the Gemini app are the exceptions: their outputs are not files, so output-mesh keeps a copy in its own catalog folder.
 - **Listen on the network.** The server listens only on `127.0.0.1`.
-- **Send your data out.** At startup, output-mesh asks the npm registry once for the latest version and sends no data about you. To turn this off, set `OUTPUT_MESH_NO_UPDATE_CHECK=1`. If you use Tailscale, it also asks the other machines in your tailnet whether they run output-mesh.
+- **Send your data out.** At startup, output-mesh asks the npm registry once for the latest version and sends no data about you. To turn this off, set `OUTPUT_MESH_NO_UPDATE_CHECK=1`. If you use Tailscale, it also asks the other machines in your tailnet whether they run output-mesh. Gemini app collection downloads outputs from Google servers, and `gws` calls the Google Drive API with your Google account. No setting turns these Gemini requests off.
 - **Let agent HTML send requests.** Previews show in sandboxed frames with no same-origin access, under `connect-src 'none'`. Scripts stay blocked until you allow them for a file. The network stays closed for scripts that you allow. One exception: a draw.io preview can load the shape images that the diagram file links to.
 
 Your catalog is in `~/Library/Application Support/AgentOutputCatalog/catalog.db`. output-mesh can rebuild all of it from disk, except your tags, notes, favorites, and final marks. Collection never overwrites those four.
