@@ -101,20 +101,34 @@ Antigravity collection reads only local data from Antigravity, Antigravity CLI, 
 
 Some lines in Antigravity transcripts are not valid JSON. output-mesh skips each of these lines and records one warning for it. A warning is not a collection error.
 
+output-mesh does not read Gemini CLI sessions (`~/.gemini/tmp/`) or browser data from Gemini on the web.
+
 ### Gemini app
 
 The Gemini app for macOS keeps its chats in an encrypted store. output-mesh opens the store in read-only mode, reads the key from the Keychain item `Gemini Safe Storage`, and decrypts each chat in memory. It collects only the outputs that Gemini made, not your messages or uploads:
 
 - HTML pages and Markdown documents.
-- Files that Gemini attached to a reply, for example PDF, PNG, DOCX, XLSX, or PPTX.
+- Documents, spreadsheets, presentations, text files, and images that Gemini attached to a reply, for example PDF, DOCX, XLSX, PPTX, CSV, or PNG.
 - Generated images.
 - Google Docs, Sheets, and Slides that Gemini made. output-mesh exports them as Markdown, XLSX, and PPTX.
 
+output-mesh skips an attached file in another format. The output of `output-mesh sweep` shows the number of skipped files as `unsupported`. output-mesh does not collect a file larger than 16 MB.
+
 output-mesh keeps a copy of each output in `~/Library/Application Support/AgentOutputCatalog/Gemini-app-artifacts/`.
 
-For some outputs, the store keeps only an address. output-mesh downloads generated images and attached files from Google servers. It gets Docs, Sheets, and Slides with the Google Workspace CLI (`gws`, Homebrew formula `googleworkspace-cli`), and `gws` uses your Google account. output-mesh downloads at most 2 files each time it collects. It downloads an image or an attached file only once. It checks Docs, Sheets, and Slides again every hour, and it tries a failed download again after one hour. Without `gws`, output-mesh cannot get Docs, Sheets, and Slides, and it records a collection error.
+For some outputs, the store keeps only an address. output-mesh downloads generated images and attached files from Google servers. It gets Docs, Sheets, and Slides with the Google Workspace CLI (`gws`), and `gws` uses your Google account. output-mesh downloads at most 2 files each time it collects. It downloads an image or an attached file only once. It checks Docs, Sheets, and Slides again every hour, and it tries a failed download again after one hour. If `gws` is not installed or not signed in, output-mesh cannot get Docs, Sheets, and Slides, and it records a collection error.
 
-When output-mesh reads the Keychain item for the first time, macOS can ask you for permission. If you deny access, Gemini app collection stops until output-mesh starts again. If Google changes the store format, this source can stop.
+To get Docs, Sheets, and Slides, set up `gws` once and sign in with your Google account:
+
+```bash
+brew install googleworkspace-cli
+gws auth setup
+gws auth login -s drive
+```
+
+`gws auth setup` configures a Google Cloud project and an OAuth client. It needs the `gcloud` CLI. To make the OAuth client by hand, read the [`gws` README](https://github.com/googleworkspace/cli). `-s drive` limits the scope picker to Google Drive. The `gws` README states that `gws` is not an officially supported Google product.
+
+Each time output-mesh starts, it reads the Keychain item once, and macOS can ask you for permission. If you deny access or do not answer in 30 seconds, Gemini app collection stops until output-mesh starts again. If Google changes the store format, this source can stop.
 
 To turn off Gemini app collection, set `OUTPUT_MESH_NO_GEMINI_APP=1`. output-mesh then does not read the Keychain item and sends no requests for Gemini outputs.
 
